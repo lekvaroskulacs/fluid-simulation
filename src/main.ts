@@ -1,8 +1,20 @@
-const output_label : HTMLElement = <HTMLElement>document.getElementById("compatibility-check");
+import { Renderer } from "./renderer";
 
-if (navigator.gpu) {
-    output_label.innerHTML = "WebGPU supported";
-}
-else {
-    output_label.innerHTML = "WebGPU NOT supported by this browser\nSupported browser: Google Chrome";
-}
+const canvas: HTMLCanvasElement = <HTMLCanvasElement>document.getElementById("gfx-main");
+canvas.setAttribute("width", window.innerWidth.toString());
+canvas.setAttribute("height", window.innerHeight.toString());
+
+const renderer = new Renderer(canvas);
+
+renderer.init();
+
+window.addEventListener("resize", () => {
+    canvas.setAttribute("width", window.innerWidth.toString());
+    canvas.setAttribute("height", window.innerHeight.toString());
+    renderer.render();
+});
+
+
+//renderParticles(new Circle(100, 100, 50));
+
+
