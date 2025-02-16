@@ -13,6 +13,7 @@ export class Renderer {
     format: GPUTextureFormat;
 
     uniformBuffer: GPUBuffer;
+    time_uniformBuffer: GPUBuffer;
     bindGroup: GPUBindGroup;
     pipeline: GPURenderPipeline;
 
@@ -26,6 +27,7 @@ export class Renderer {
         await this.setupDevice();
         this.setupAssets();
         await this.setupPipeline();
+        //requestAnimationFrame(this.render);
         this.render();
     }
 
@@ -46,22 +48,46 @@ export class Renderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         })
 
+        this.time_uniformBuffer = this.device.createBuffer({
+            size: 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        })
+
         const bindGroupLayout = this.device.createBindGroupLayout({
-            entries: [{
-                binding: 0,
-                visibility: GPUShaderStage.VERTEX,
-                buffer: {}
-            }]
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: {
+                        type: "uniform"
+                    }
+                }
+            ]
         });
 
         this.bindGroup = this.device.createBindGroup({
             layout: bindGroupLayout,
-            entries: [{
-                binding: 0,
-                resource: {
-                    buffer: this.uniformBuffer
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.uniformBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: this.time_uniformBuffer
+                    }
                 }
-            }]
+            ]
         });
 
         const pipelineLayout = this.device.createPipelineLayout({
@@ -97,18 +123,20 @@ export class Renderer {
     }
 
     setupAssets() {
-        this.mesh = new Plane(4, this.device);
+        this.mesh = new Plane(128, this.device);
     }
 
     render() {
-        this.applyTransforms();
+        if (!this)
+            console.log("this is null");
+        this.writeBuffers();
 
         const commandEncoder: GPUCommandEncoder = this.device.createCommandEncoder();
         const textureView: GPUTextureView = this.context.getCurrentTexture().createView();
         const renderpass: GPURenderPassEncoder = commandEncoder.beginRenderPass({
             colorAttachments: [{
                 view: textureView,
-                clearValue: {r: 0, g: 0, b: 0, a: 1},
+                clearValue: {r: 133.0/255.0, g: 211.0/255.0, b: 241.0/255.0, a: 1},
                 loadOp: "clear",
                 storeOp: "store"
             }]
@@ -122,21 +150,26 @@ export class Renderer {
         renderpass.end();
         
         this.device.queue.submit([commandEncoder.finish()]);
+
+        requestAnimationFrame(() => this.render());
     }
 
 
-    applyTransforms() {
+    writeBuffers() {
         const projection = mat4.create();
         mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 10);
 
         const view = mat4.create();
-        mat4.lookAt(view, [-2, 0, 2], [0, 0, 0], [0, 0, 1]);
+        mat4.lookAt(view, [-3, 0, 3], [0, 0, 0], [0, 0, 1]);
 
         const model = mat4.create();
-        mat4.rotate(model, model, 0.0, [0, 0, 1]);
+        mat4.scale(model, model, [1, 1, 1]);
+
+        const time = performance.now() / 1000;
 
         this.device.queue.writeBuffer(this.uniformBuffer, 0, <ArrayBuffer>model);
         this.device.queue.writeBuffer(this.uniformBuffer, 64, <ArrayBuffer>view);
         this.device.queue.writeBuffer(this.uniformBuffer, 128, <ArrayBuffer>projection);
+        this.device.queue.writeBuffer(this.time_uniformBuffer, 0, new Float32Array([time]));
     }
 }
