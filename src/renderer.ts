@@ -1,6 +1,7 @@
 import shader from "./shaders/shaders.wgsl"
 import { TriangleMesh } from "./triangle_mesh";
 import { mat4 } from "gl-matrix";
+import { Plane } from "./plane_mesh";
 
 export class Renderer {
 
@@ -15,7 +16,7 @@ export class Renderer {
     bindGroup: GPUBindGroup;
     pipeline: GPURenderPipeline;
 
-    mesh: TriangleMesh;
+    mesh: Plane;
     
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -87,7 +88,8 @@ export class Renderer {
             },
 
             primitive: {
-                topology: "triangle-list"
+                topology: "triangle-strip",
+                stripIndexFormat: "uint16"
             },
 
             layout: pipelineLayout
@@ -95,22 +97,11 @@ export class Renderer {
     }
 
     setupAssets() {
-        this.mesh = new TriangleMesh(this.device);
+        this.mesh = new Plane(4, this.device);
     }
 
     render() {
-        const projection = mat4.create();
-        mat4.perspective(projection, Math.PI / 4, this.canvas.width/this.canvas.height, 0.1, 10);
-
-        const view = mat4.create();
-        mat4.lookAt(view, [-2, 0, 2], [0, 0, 0], [0, 0, 1]);
-
-        const model = mat4.create();
-        mat4.rotate(model, model, 0.0, [0, 0, 1]);
-
-        this.device.queue.writeBuffer(this.uniformBuffer, 0, <ArrayBuffer>model);
-        this.device.queue.writeBuffer(this.uniformBuffer, 64, <ArrayBuffer>view);
-        this.device.queue.writeBuffer(this.uniformBuffer, 128, <ArrayBuffer>projection);
+        this.applyTransforms();
 
         const commandEncoder: GPUCommandEncoder = this.device.createCommandEncoder();
         const textureView: GPUTextureView = this.context.getCurrentTexture().createView();
@@ -124,12 +115,28 @@ export class Renderer {
         });
 
         renderpass.setPipeline(this.pipeline);
-        renderpass.setVertexBuffer(0, this.mesh.buffer);
+        renderpass.setVertexBuffer(0, this.mesh.vertexBuffer);
+        renderpass.setIndexBuffer(this.mesh.indexBuffer, "uint16");
         renderpass.setBindGroup(0, this.bindGroup);
-        renderpass.draw(3, 1, 0, 0);
+        renderpass.drawIndexed(this.mesh.indexBuffer.size / Uint16Array.BYTES_PER_ELEMENT);
         renderpass.end();
         
         this.device.queue.submit([commandEncoder.finish()]);
     }
 
+
+    applyTransforms() {
+        const projection = mat4.create();
+        mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 10);
+
+        const view = mat4.create();
+        mat4.lookAt(view, [-2, 0, 2], [0, 0, 0], [0, 0, 1]);
+
+        const model = mat4.create();
+        mat4.rotate(model, model, 0.0, [0, 0, 1]);
+
+        this.device.queue.writeBuffer(this.uniformBuffer, 0, <ArrayBuffer>model);
+        this.device.queue.writeBuffer(this.uniformBuffer, 64, <ArrayBuffer>view);
+        this.device.queue.writeBuffer(this.uniformBuffer, 128, <ArrayBuffer>projection);
+    }
 }

@@ -11,14 +11,10 @@ struct Fragment {
 };
 
 @vertex 
-fn vs_main(@location(0) vertexPosition: vec3<f32>, @location(1) vertexColor: vec3<f32>) -> Fragment {
-
-    
-
+fn vs_main(@location(0) vertexPosition: vec3<f32>) -> Fragment {
     var output : Fragment;
     output.Position = transformUBO.projection * transformUBO.view * transformUBO.model * vec4<f32>(vertexPosition, 1.0);
-    output.Color = vec4<f32>(vertexColor, 1.0);
-
+    output.Color = vec4<f32>(1, 1, 1, 1);
     return output;
 }
 
