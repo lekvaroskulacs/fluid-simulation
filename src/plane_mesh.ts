@@ -4,14 +4,14 @@ export class Plane {
     bufferLayout: GPUVertexBufferLayout;
     indexBuffer: GPUBuffer;
 
-    constructor(detail: number, device: GPUDevice) {
+    constructor(size: number, detail: number, device: GPUDevice) {
         const _vert_data = [];
         for(let y = 0; y <= detail; y++) {
             for(let x = 0; x <= detail; x++) {
                 const u = x / detail;
                 const v = y / detail;
-                const px = u * 2 - 1;
-                const py = v * 2 - 1;
+                const px = u * 2 * size - size;
+                const py = v * 2 * size - size;
                 const pz = 0;
                 _vert_data.push(px, py, pz);
             }

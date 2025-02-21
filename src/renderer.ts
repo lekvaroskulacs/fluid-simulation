@@ -14,6 +14,7 @@ export class Renderer {
 
     uniformBuffer: GPUBuffer;
     time_uniformBuffer: GPUBuffer;
+    waveOptions_uniformBuffer: GPUBuffer;
     bindGroup: GPUBindGroup;
     pipeline: GPURenderPipeline;
 
@@ -29,6 +30,12 @@ export class Renderer {
         await this.setupPipeline();
         //requestAnimationFrame(this.render);
         this.render();
+        const inputs = document.getElementsByClassName("listened-for-input");
+        for (let i = 0; i < inputs.length; i++) {
+            inputs.item(i)?.addEventListener("submit", () => {
+                this.writeOptionBuffer();
+            });
+        }
     }
 
     async setupDevice() {
@@ -46,12 +53,23 @@ export class Renderer {
         this.uniformBuffer = this.device.createBuffer({
             size: 64 * 3,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        })
+        });
 
         this.time_uniformBuffer = this.device.createBuffer({
             size: 4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
+        this.waveOptions_uniformBuffer = this.device.createBuffer({
+            size: 7 * 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         })
+
+        const texture = await this.createNoiseTexture();
+        const sampler = this.device.createSampler({
+            magFilter: "linear",
+            minFilter: "linear"
+        });
 
         const bindGroupLayout = this.device.createBindGroupLayout({
             entries: [
@@ -68,6 +86,23 @@ export class Renderer {
                     buffer: {
                         type: "uniform"
                     }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: {
+                        type: "uniform"
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.VERTEX,
+                    texture: {}
+                },
+                {
+                    binding: 4,
+                    visibility: GPUShaderStage.VERTEX,
+                    sampler: {}
                 }
             ]
         });
@@ -86,6 +121,20 @@ export class Renderer {
                     resource: {
                         buffer: this.time_uniformBuffer
                     }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.waveOptions_uniformBuffer
+                    }
+                },
+                {
+                    binding: 3,
+                    resource: texture.createView()
+                },
+                {
+                    binding: 4,
+                    resource: sampler
                 }
             ]
         });
@@ -123,7 +172,7 @@ export class Renderer {
     }
 
     setupAssets() {
-        this.mesh = new Plane(128, this.device);
+        this.mesh = new Plane(1, 200, this.device);
     }
 
     render() {
@@ -171,5 +220,44 @@ export class Renderer {
         this.device.queue.writeBuffer(this.uniformBuffer, 64, <ArrayBuffer>view);
         this.device.queue.writeBuffer(this.uniformBuffer, 128, <ArrayBuffer>projection);
         this.device.queue.writeBuffer(this.time_uniformBuffer, 0, new Float32Array([time]));
+
+        this.writeOptionBuffer();
+    }
+
+    async createNoiseTexture(): Promise<GPUTexture> {
+        const response = await fetch("./src/assets/noiseTexture.png");
+        const imageBitmap = await createImageBitmap(await response.blob());
+
+        const texture = this.device.createTexture({
+            size: [imageBitmap.width, imageBitmap.height, 1],
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+
+        this.device.queue.copyExternalImageToTexture(
+            { source: imageBitmap },
+            { texture },
+            [imageBitmap.width, imageBitmap.height]
+        );
+
+        return texture;
+    }
+
+    writeOptionBuffer() {
+        const _amplitude: number = +(<HTMLInputElement> document.getElementById("amplitude")).value;
+        const _frequency: number = +(<HTMLInputElement> document.getElementById("frequency")).value;
+        const _amplitudeMult: number = +(<HTMLInputElement> document.getElementById("amplitudeMultiplier")).value;
+        const _frequencyMult: number = +(<HTMLInputElement> document.getElementById("frequencyMultiplier")).value;
+        const _basePhase: number = +(<HTMLInputElement> document.getElementById("basePhase")).value;
+        const _baseSpeed: number = +(<HTMLInputElement> document.getElementById("baseSpeed")).value;
+        const _maxWaves: number = +(<HTMLInputElement> document.getElementById("maxWaves")).value;
+
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 0, new Float32Array([_amplitude]));
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 4, new Float32Array([_frequency]));
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 8, new Float32Array([_amplitudeMult]));
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 12, new Float32Array([_frequencyMult]));
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 16, new Float32Array([_basePhase]));
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 20, new Float32Array([_baseSpeed]));
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 24, new Float32Array([_maxWaves]));
     }
 }

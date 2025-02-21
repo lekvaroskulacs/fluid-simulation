@@ -6,7 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
     <style>
-        canvas{
+        canvas, form{
+            margin: 0;
+            padding: 0;
+            border: 0;
+            position: relative;
+
+        }
+        div#container {
             margin: 0;
             padding: 0;
             border: 0;
@@ -19,6 +26,28 @@
 <body>
     <div id="container">
         <h1 id="compatibility-check"></h1>
+        <form id="form" method="post">
+            <label for="amplitude">Amplitude </label>
+            <input class="listened-for-input" type="text" id="amplitude" name="amplitude" placeholder="eg: 5.2" required value="1">
+
+            <label for="frequency">Frequency </label>
+            <input class="listened-for-input" type="text" id="frequency" name="frequency" placeholder="eg: 5.2" required value="1">
+
+            <label for="amplitudeMultiplier">Amplitude Multiplier </label>
+            <input class="listened-for-input" type="text" id="amplitudeMultiplier" name="amplitudeMultiplier" placeholder="eg: 5.2" required value="0.82">
+
+            <label for="frequencyMultiplier">Frequency Multiplier </label>
+            <input class="listened-for-input" type="text" id="frequencyMultiplier" name="frequencyMultiplier" placeholder="eg: 5.2" required value="1.18">
+
+            <label for="basePhase">basePhase </label>
+            <input class="listened-for-input" type="text" id="basePhase" name="basePhase" placeholder="eg: 5.2" required value="1">
+
+            <label for="baseSpeed">baseSpeed </label>
+            <input class="listened-for-input" type="text" id="baseSpeed" name="baseSpeed" placeholder="eg: 5.2" required value="1">
+
+            <label for="maxWaves">maxWaves </label>
+            <input class="listened-for-input" type="text" id="maxWaves" name="maxWaves" placeholder="eg: 5.2" required value="1">
+        </form>
         <canvas id="gfx-main" width="800" height="600"></canvas>
     </div>
     <script src="dist/main.js"></script>
