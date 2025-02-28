@@ -21,6 +21,11 @@
             top: 0;
             left: 0;
         }
+        body, html, head, h1 {
+            margin: 0;
+            padding: 0;
+            border: 0;
+        }
     </style>
 </head>
 <body>
@@ -31,10 +36,10 @@
             <input class="listened-for-input" type="text" id="amplitude" name="amplitude" placeholder="eg: 5.2" required value="1">
 
             <label for="frequency">Frequency </label>
-            <input class="listened-for-input" type="text" id="frequency" name="frequency" placeholder="eg: 5.2" required value="1">
+            <input class="listened-for-input" type="text" id="frequency" name="frequency" placeholder="eg: 5.2" required value="3">
 
             <label for="amplitudeMultiplier">Amplitude Multiplier </label>
-            <input class="listened-for-input" type="text" id="amplitudeMultiplier" name="amplitudeMultiplier" placeholder="eg: 5.2" required value="0.82">
+            <input class="listened-for-input" type="text" id="amplitudeMultiplier" name="amplitudeMultiplier" placeholder="eg: 5.2" required value="0.64">
 
             <label for="frequencyMultiplier">Frequency Multiplier </label>
             <input class="listened-for-input" type="text" id="frequencyMultiplier" name="frequencyMultiplier" placeholder="eg: 5.2" required value="1.18">
@@ -46,7 +51,10 @@
             <input class="listened-for-input" type="text" id="baseSpeed" name="baseSpeed" placeholder="eg: 5.2" required value="1">
 
             <label for="maxWaves">maxWaves </label>
-            <input class="listened-for-input" type="text" id="maxWaves" name="maxWaves" placeholder="eg: 5.2" required value="1">
+            <input class="listened-for-input" type="text" id="maxWaves" name="maxWaves" placeholder="eg: 5.2" required value="32">
+
+            <label for="sunPosition">Sun Position </label>
+            <input class="listened-for-input" type="text" id="sunPosition" name="sunPosition" placeholder="eg: 5.2" required value="1">
         </form>
         <canvas id="gfx-main" width="800" height="600"></canvas>
     </div>
