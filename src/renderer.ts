@@ -1,7 +1,8 @@
 import shader from "./shaders/water.wgsl"
 import { TriangleMesh } from "./triangle_mesh";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { Plane } from "./plane_mesh";
+import { Skybox } from "./skybox";
 
 export class Renderer {
 
@@ -20,17 +21,20 @@ export class Renderer {
     pipeline: GPURenderPipeline;
 
     mesh: Plane;
+
+    skybox: Skybox;
+    cameraForward: vec3 = vec3.fromValues(0, 0, 0);
     
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
     }
 
     async init() {
+        this.cameraInputs();
         await this.setupDevice();
         this.setupAssets();
         await this.setupPipeline();
         //requestAnimationFrame(this.render);
-        this.render();
         const inputs = document.getElementsByClassName("listened-for-input");
         for (let i = 0; i < inputs.length; i++) {
             inputs.item(i)?.addEventListener("input", () => {
@@ -39,6 +43,47 @@ export class Renderer {
                 this.writeOptionBuffer();
             });
         }
+        this.skybox = new Skybox(this.device, this.format, this.context);
+        await this.skybox.init(this.cameraForward);
+        this.render();
+    }
+
+    cameraInputs() {
+        let yaw = 1.5; // Rotation around the Z axis (left/right)
+        let pitch = -0.5; // Rotation around the X axis (up/down)
+        const sensitivity = 0.002; // Controls how fast the camera rotates
+
+        pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+
+        this.cameraForward = vec3.fromValues(
+            Math.cos(pitch) * Math.sin(yaw),
+            Math.cos(pitch) * Math.cos(yaw),
+            Math.sin(pitch),
+        );  
+
+        document.addEventListener('mousemove', (event) => {
+            if ( (event.buttons & 1) !== 1 ) //Check if primary mouse button is pressed
+                return;
+
+            const dx = event.movementX; // Change in mouse X position
+            const dy = -event.movementY; // Change in mouse Y position
+        
+            // Update yaw and pitch based on mouse movement
+            yaw -= dx * sensitivity;
+            pitch -= dy * sensitivity;
+        
+            // Clamp pitch to avoid gimbal lock
+            pitch = Math.max(-Math.PI / 2 + 0.00001, Math.min(Math.PI / 2 - 0.00001, pitch));
+
+            this.cameraForward = vec3.fromValues(
+                Math.cos(pitch) * Math.sin(yaw),
+                Math.cos(pitch) * Math.cos(yaw),
+                Math.sin(pitch),
+            );
+            
+            this.skybox.cameraForward = this.cameraForward;
+            
+        });
     }
 
     async setupDevice() {
@@ -71,12 +116,6 @@ export class Renderer {
         this.sceneOptions_uniformBuffer = this.device.createBuffer({
             size: 4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        });
-
-        const texture = await this.createNoiseTexture();
-        const sampler = this.device.createSampler({
-            magFilter: "linear",
-            minFilter: "linear"
         });
 
         const bindGroupLayout = this.device.createBindGroupLayout({
@@ -189,8 +228,8 @@ export class Renderer {
         const renderpass: GPURenderPassEncoder = commandEncoder.beginRenderPass({
             colorAttachments: [{
                 view: textureView,
-                clearValue: {r: 133.0/255.0, g: 211.0/255.0, b: 241.0/255.0, a: 1},
-                loadOp: "clear",
+                clearValue: {r: 133.0/255.0, g: 211.0/255.0, b: 241.0/255.0, a: 0},
+                loadOp: "load",
                 storeOp: "store"
             }]
         });
@@ -213,8 +252,11 @@ export class Renderer {
         mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 10);
 
         const view = mat4.create();
-        mat4.lookAt(view, [-3, 0, 3], [0, 0, 0], [0, 0, 1]);
-
+        const cameraPos = vec3.fromValues(-3, 0, 3);
+        const forwardWorld = vec3.create();
+        vec3.add(forwardWorld, this.cameraForward, cameraPos);
+        mat4.lookAt(view, cameraPos, forwardWorld, [0, 0, 1]);
+        
         const model = mat4.create();
         mat4.scale(model, model, [1, 1, 1]);
 
@@ -226,25 +268,6 @@ export class Renderer {
         this.device.queue.writeBuffer(this.time_uniformBuffer, 0, new Float32Array([time]));
 
         this.writeOptionBuffer();
-    }
-
-    async createNoiseTexture(): Promise<GPUTexture> {
-        const response = await fetch("./src/assets/noiseTexture.png");
-        const imageBitmap = await createImageBitmap(await response.blob());
-
-        const texture = this.device.createTexture({
-            size: [imageBitmap.width, imageBitmap.height, 1],
-            format: 'rgba8unorm',
-            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-        });
-
-        this.device.queue.copyExternalImageToTexture(
-            { source: imageBitmap },
-            { texture },
-            [imageBitmap.width, imageBitmap.height]
-        );
-
-        return texture;
     }
 
     writeOptionBuffer() {
@@ -269,35 +292,5 @@ export class Renderer {
         this.device.queue.writeBuffer(this.sceneOptions_uniformBuffer, 0, new Float32Array([_sunPosition]));
     }
 
-    renderSkybox() {
-        // Cube vertices (positions)
-        const cubeVertexBuffer: Float32Array = new Float32Array([
-            -1.0, -1.0,  1.0, // Front-bottom-left
-             1.0, -1.0,  1.0, // Front-bottom-right
-             1.0,  1.0,  1.0, // Front-top-right
-            -1.0,  1.0,  1.0, // Front-top-left
-            -1.0, -1.0, -1.0, // Back-bottom-left
-             1.0, -1.0, -1.0, // Back-bottom-right
-             1.0,  1.0, -1.0, // Back-top-right
-            -1.0,  1.0, -1.0  // Back-top-left
-        ]);
-
-        // Cube indices (to form triangles)
-        const cubeIndexBuffer: Float32Array = new Float32Array([
-            // Front face
-            0, 1, 2, 2, 3, 0,
-            // Right face
-            1, 5, 6, 6, 2, 1,
-            // Back face
-            5, 4, 7, 7, 6, 5,
-            // Left face
-            4, 0, 3, 3, 7, 4,
-            // Bottom face
-            4, 5, 1, 1, 0, 4,
-            // Top face
-            3, 2, 6, 6, 7, 3
-        ]);
-
-
-    }
+    
 }
