@@ -34,7 +34,6 @@ export class Renderer {
         await this.setupDevice();
         this.setupAssets();
         await this.setupPipeline();
-        //requestAnimationFrame(this.render);
         const inputs = document.getElementsByClassName("listened-for-input");
         for (let i = 0; i < inputs.length; i++) {
             inputs.item(i)?.addEventListener("input", () => {
@@ -43,7 +42,7 @@ export class Renderer {
                 this.writeOptionBuffer();
             });
         }
-        this.skybox = new Skybox(this.device, this.format, this.context);
+        this.skybox = new Skybox(this.device, this.format, this.context, this.canvas);
         await this.skybox.init(this.cameraForward);
         this.render();
     }
@@ -57,15 +56,15 @@ export class Renderer {
 
         this.cameraForward = vec3.fromValues(
             Math.cos(pitch) * Math.sin(yaw),
-            Math.cos(pitch) * Math.cos(yaw),
             Math.sin(pitch),
+            Math.cos(pitch) * Math.cos(yaw),
         );  
 
         document.addEventListener('mousemove', (event) => {
             if ( (event.buttons & 1) !== 1 ) //Check if primary mouse button is pressed
                 return;
 
-            const dx = event.movementX; // Change in mouse X position
+            const dx = -event.movementX; // Change in mouse X position
             const dy = -event.movementY; // Change in mouse Y position
         
             // Update yaw and pitch based on mouse movement
@@ -77,8 +76,8 @@ export class Renderer {
 
             this.cameraForward = vec3.fromValues(
                 Math.cos(pitch) * Math.sin(yaw),
-                Math.cos(pitch) * Math.cos(yaw),
                 Math.sin(pitch),
+                Math.cos(pitch) * Math.cos(yaw),
             );
             
             this.skybox.cameraForward = this.cameraForward;
@@ -252,10 +251,10 @@ export class Renderer {
         mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 10);
 
         const view = mat4.create();
-        const cameraPos = vec3.fromValues(-3, 0, 3);
+        const cameraPos = vec3.fromValues(0, 1, 0);
         const forwardWorld = vec3.create();
         vec3.add(forwardWorld, this.cameraForward, cameraPos);
-        mat4.lookAt(view, cameraPos, forwardWorld, [0, 0, 1]);
+        mat4.lookAt(view, cameraPos, forwardWorld, [0, 1, 0]);
         
         const model = mat4.create();
         mat4.scale(model, model, [1, 1, 1]);

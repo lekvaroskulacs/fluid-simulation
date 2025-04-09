@@ -41,8 +41,8 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     var p = vec4<f32>(vertexPosition, 1.0);
     p = transformUBO.model * p;
 
-    var dz_dx: f32 = 0.0; // Partial derivative with respect to x
-    var dz_dy: f32 = 0.0; // Partial derivative with respect to y
+    var dy_dx: f32 = 0.0; // Partial derivative with respect to x
+    var dy_dz: f32 = 0.0; // Partial derivative with respect to y
 
     var amplitude: f32 = waveOptions._amplitude;
     var frequency: f32 = waveOptions._frequency;
@@ -74,28 +74,28 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         let direction = vec2<f32>(sin(seed), cos(seed));
         seed += seedIter;
 
-        let angle = dot(normalize(direction), vec2<f32>(p.x, p.y)) * frequency + time * baseSpeed + phase;
+        let angle = dot(normalize(direction), vec2<f32>(p.x, p.z)) * frequency + time * baseSpeed + phase;
         let sinVal = sin(angle);
         let cosVal = cos(angle);
 
-        p.z += amplitude * exp(sinVal - 1) / e;
-        dz_dx += amplitude * cosVal * direction.x * frequency * exp(sinVal - 1) / e;
-        dz_dy += amplitude * cosVal * direction.y * frequency * exp(sinVal - 1) / e;
+        p.y += amplitude * exp(sinVal - 1) / e;
+        dy_dx += amplitude * cosVal * direction.x * frequency * exp(sinVal - 1) / e;
+        dy_dz += amplitude * cosVal * direction.y * frequency * exp(sinVal - 1) / e;
 
-        //p.x += direction.x * dz_dx;
-        //p.y += direction.y * dz_dy;
+        //p.x += direction.x * dy_dx;
+        //p.y += direction.y * dy_dy;
 
         amplitude = amplitude * amplitudeMult;
         frequency = frequency * frequencyMult;
         amplitudeSum += amplitude;
     }
 
-    p.z = p.z / amplitudeSum; 
-    dz_dx /= amplitudeSum;
-    dz_dy /= amplitudeSum;
+    p.y = p.y / amplitudeSum; 
+    dy_dx /= amplitudeSum;
+    dy_dz /= amplitudeSum;
 
-    var tangent: vec3<f32> = normalize(vec3<f32>(1, 0, dz_dx + 0.00001));
-    var binormal: vec3<f32> = normalize(vec3<f32>(0, 1, dz_dy + 0.00001));
+    var tangent: vec3<f32> = normalize(vec3<f32>(1, 0, dy_dx + 0.00001));
+    var binormal: vec3<f32> = normalize(vec3<f32>(0, 1, dy_dz + 0.00001));
 
     var obj_space_normal = normalize(cross(tangent, binormal));
     var world_space_normal = normalize(transformUBO.model * vec4<f32>(obj_space_normal, 0)).xyz;
@@ -115,7 +115,7 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     var sun = normalize(vec3<f32>(cos(sunPos), sin(sunPos), sin(sunPos)));
     var lambert = max(dot(sun, normal), 0.0);
 
-    var camera = vec3<f32>(-3, 0, 3);
+    var camera = vec3<f32>(0, 1, 0);
     var cameraDir = normalize(camera - WorldPosition.xyz);
     var halfway = normalize(cameraDir + sun);
     var specular = pow(max(dot(halfway, normal), 0.0), 50.0);

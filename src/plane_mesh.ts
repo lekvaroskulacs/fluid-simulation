@@ -11,8 +11,8 @@ export class Plane {
                 const u = x / detail;
                 const v = y / detail;
                 const px = u * 2 * size - size;
-                const py = v * 2 * size - size;
-                const pz = 0;
+                const pz = v * 2 * size - size;
+                const py = 0;
                 _vert_data.push(px, py, pz);
             }
         }

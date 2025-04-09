@@ -3,6 +3,8 @@ import { mat4, vec3 } from "gl-matrix";
 
 export class Skybox {
 
+    canvas: HTMLCanvasElement;
+
     device: GPUDevice;
     format: GPUTextureFormat;
     context: GPUCanvasContext;
@@ -10,17 +12,17 @@ export class Skybox {
     depthTextureView: GPUTextureView;
     pipeline: GPURenderPipeline;
     bindGroup: GPUBindGroup;
-    vertexBuffer: GPUBuffer;
-    indexBuffer: GPUBuffer;
-    viewBuffer: GPUBuffer;
+
+    viewDirInverseBuffer: GPUBuffer;
 
     cameraForward: vec3;
 
 
-    constructor(device: GPUDevice, format: GPUTextureFormat, context: GPUCanvasContext) {
+    constructor(device: GPUDevice, format: GPUTextureFormat, context: GPUCanvasContext, canvas: HTMLCanvasElement) {
         this.device = device;
         this.format = format;
         this.context = context;
+        this.canvas = canvas;
     }
 
     async init(cameraForward: vec3) {
@@ -32,7 +34,7 @@ export class Skybox {
     async createSkyboxTexture(): Promise<GPUTexture> {
         const bitmaps: ImageBitmap[] = [];
         for (let i = 1; i <= 6; i++) {
-            const response = <Response> await fetch("./src/assets/skybox" + i + ".png");
+            const response = <Response> await fetch("./src/assets/skybox" + i + ".jpg");
             bitmaps[i-1] = <ImageBitmap> await createImageBitmap(await response.blob());
         }
         
@@ -55,52 +57,7 @@ export class Skybox {
     }
 
     async setupSkybox() {
-        // Cube vertices (positions)
-        const cubeVertexBuffer: Float32Array = new Float32Array([
-            -1.0, -1.0,  1.0, // Front-bottom-left
-             1.0, -1.0,  1.0, // Front-bottom-right
-             1.0,  1.0,  1.0, // Front-top-right
-            -1.0,  1.0,  1.0, // Front-top-left
-            -1.0, -1.0, -1.0, // Back-bottom-left
-             1.0, -1.0, -1.0, // Back-bottom-right
-             1.0,  1.0, -1.0, // Back-top-right
-            -1.0,  1.0, -1.0  // Back-top-left
-        ]);
-
-        // Cube indices (to form triangles)
-        const cubeIndexBuffer: Float32Array = new Float32Array([
-            // Front face
-            0, 1, 2, 2, 3, 0,
-            // Right face
-            1, 5, 6, 6, 2, 1,
-            // Back face
-            5, 4, 7, 7, 6, 5,
-            // Left face
-            4, 0, 3, 3, 7, 4,
-            // Bottom face
-            4, 5, 1, 1, 0, 4,
-            // Top face
-            3, 2, 6, 6, 7, 3
-        ]);
-
-        this.vertexBuffer = this.device.createBuffer({
-            size: cubeVertexBuffer.BYTES_PER_ELEMENT * cubeVertexBuffer.length,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
-            mappedAtCreation: true
-        });
-
-        new Float32Array(this.vertexBuffer.getMappedRange()).set(cubeVertexBuffer);
-        this.vertexBuffer.unmap();
-
-        this.indexBuffer = this.device.createBuffer({
-            size: cubeIndexBuffer.BYTES_PER_ELEMENT * cubeIndexBuffer.length,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.INDEX,
-            mappedAtCreation: true
-        });
-
-        new Uint16Array(this.indexBuffer.getMappedRange()).set(cubeIndexBuffer);
-        this.indexBuffer.unmap();
-
+        
         const bindGroupLayout = this.device.createBindGroupLayout({
             entries: [
                 {
@@ -126,19 +83,17 @@ export class Skybox {
         })
 
 
-        this.viewBuffer = this.device.createBuffer({
+        this.viewDirInverseBuffer = this.device.createBuffer({
             size: 64,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM
         });
         
-
-        // Bind the cube map texture and sampler
         this.bindGroup = this.device.createBindGroup({
             layout: bindGroupLayout,
             entries: [
                 { binding: 0, resource: (await this.createSkyboxTexture()).createView({ dimension: 'cube' }) },
                 { binding: 1, resource: this.device.createSampler() },
-                { binding: 2, resource: { buffer: this.viewBuffer } }
+                { binding: 2, resource: { buffer: this.viewDirInverseBuffer } }
 
             ]
         });
@@ -147,17 +102,12 @@ export class Skybox {
             bindGroupLayouts: [bindGroupLayout]
         })
 
-        // Example: Setting up the render pipeline for the skybox
         this.pipeline = this.device.createRenderPipeline({
             vertex: {
                 module: this.device.createShaderModule({
                     code: skybox
                 }),
-                entryPoint: 'vs_main',
-                buffers: [{
-                    arrayStride: 3 * 4, // 3 floats (x, y, z)
-                    attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }]
-                }]
+                entryPoint: 'vs_main'
             },
             fragment: {
                 module: this.device.createShaderModule({
@@ -167,7 +117,7 @@ export class Skybox {
                 targets: [{ format: this.format }]
             },
             depthStencil: {
-                depthWriteEnabled: false, // Disable depth writing for the skybox
+                depthWriteEnabled: true, 
                 depthCompare: 'less-equal', // Render the skybox behind everything else
                 format: 'depth24plus'
             },
@@ -188,9 +138,20 @@ export class Skybox {
     }
 
     renderSkybox() {
+        const projection = mat4.create();
+        mat4.perspective(projection, 60 * Math.PI / 180, this.canvas.width / this.canvas.height, 0.1, 10);
+
         const skyboxView = mat4.create();
         mat4.lookAt(skyboxView, [0, 0, 0], this.cameraForward, [0, 1, 0]);
-        this.device.queue.writeBuffer(this.viewBuffer, 0, new Float32Array(skyboxView).buffer);
+
+        skyboxView[12] = skyboxView[13] = skyboxView[14] = 0; 
+
+        const viewProj = mat4.create();
+        mat4.mul(viewProj, projection, skyboxView);
+        const inverse = mat4.create();
+        mat4.invert(inverse, viewProj);
+        
+        this.device.queue.writeBuffer(this.viewDirInverseBuffer, 0, new Float32Array(inverse).buffer);
 
         const commandEncoder: GPUCommandEncoder = this.device.createCommandEncoder();
         const textureView: GPUTextureView = this.context.getCurrentTexture().createView();
@@ -211,9 +172,7 @@ export class Skybox {
 
         renderPass.setPipeline(this.pipeline);
         renderPass.setBindGroup(0, this.bindGroup);
-        renderPass.setVertexBuffer(0, this.vertexBuffer);
-        renderPass.setIndexBuffer(this.indexBuffer, 'uint16');
-        renderPass.drawIndexed(36); // Draw the cube (36 indices)
+        renderPass.draw(3);
         renderPass.end();
 
         this.device.queue.submit([commandEncoder.finish()]);
