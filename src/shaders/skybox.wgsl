@@ -29,5 +29,4 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOutput {
 fn fs_main(@location(0) FragPosition: vec4<f32>) -> @location(0) vec4<f32> {
     let t =  transform.viewDirInverse * FragPosition;
     return textureSample(cubeMap, cubeSampler, normalize(t.xyz / t.w) * vec3f(1, 1, -1));
-    //return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }

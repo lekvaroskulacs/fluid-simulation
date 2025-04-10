@@ -21,7 +21,8 @@ struct WaveOptions {
 };
 
 struct SceneOptions {
-    _sunPosition: f32
+    _cameraPosition: vec4<f32>,
+    _sunPosition: f32,
 }
 
 @binding(0) @group(0) var<uniform> transformUBO: TransformData;
@@ -31,6 +32,9 @@ struct SceneOptions {
 @binding(2) @group(0) var<uniform> waveOptions: WaveOptions;
 
 @binding(3) @group(0) var<uniform> sceneOptions: SceneOptions;
+
+@binding(4) @group(0) var cubeMap: texture_cube<f32>;
+@binding(5) @group(0) var cubeSampler: sampler;
 
 const PI: f32 = 3.141592653589793;
 const e: f32 = 2.718281828459045;
@@ -82,8 +86,8 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         dy_dx += amplitude * cosVal * direction.x * frequency * exp(sinVal - 1) / e;
         dy_dz += amplitude * cosVal * direction.y * frequency * exp(sinVal - 1) / e;
 
-        //p.x += direction.x * dy_dx;
-        //p.y += direction.y * dy_dy;
+        p.x += direction.x * dy_dx * 0.1;
+        p.z += direction.y * dy_dz * 0.1;
 
         amplitude = amplitude * amplitudeMult;
         frequency = frequency * frequencyMult;
@@ -94,8 +98,11 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     dy_dx /= amplitudeSum;
     dy_dz /= amplitudeSum;
 
-    var tangent: vec3<f32> = normalize(vec3<f32>(1, 0, dy_dx + 0.00001));
-    var binormal: vec3<f32> = normalize(vec3<f32>(0, 1, dy_dz + 0.00001));
+    var tangent: vec3<f32> = normalize(vec3<f32>(0, dy_dx, 1));
+    var binormal: vec3<f32> = normalize(vec3<f32>(1, dy_dz, 0));
+
+    //var tangent: vec3<f32> = normalize(vec3<f32>(1, 0, dy_dx + 0.0001));
+    //var binormal: vec3<f32> = normalize(vec3<f32>(0, 1, dy_dz + 0.0001));
 
     var obj_space_normal = normalize(cross(tangent, binormal));
     var world_space_normal = normalize(transformUBO.model * vec4<f32>(obj_space_normal, 0)).xyz;
@@ -108,19 +115,41 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
 
 @fragment
 fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>) -> @location(0) vec4<f32> {
-    var ambient = vec4<f32>(37, 150, 190, 1) / 255;
+    
+    const SPECULAR_SHININESS = 300.0;
+    const SPECULAR_STRENGTH = 0.7;
+    const FRESNEL_SHININESS = 5.0;
+    const FRESNEL_STRENGTH = 1.0;
+    const REFLECTION_STRENGTH = 1.0;
+    const DIFFUSE_REFLECTANCE = 1.0;
+    const SUN_DIRECTION = vec3f(-0.5, 1, 0.5);
+    const AMBIENT_RGB = vec3f(153, 179, 216);
+    
+    var ambient = vec4<f32>(AMBIENT_RGB, 1) / 255;
 
     var normal = normalize(Normal.xyz);
     let sunPos = sceneOptions._sunPosition;
-    var sun = normalize(vec3<f32>(cos(sunPos), sin(sunPos), sin(sunPos)));
-    var lambert = max(dot(sun, normal), 0.0);
+    var sun = normalize(SUN_DIRECTION);
+    var lambert = max(dot(sun, normal), 0.0) * DIFFUSE_REFLECTANCE;
 
-    var camera = vec3<f32>(0, 1, 0);
-    var cameraDir = normalize(camera - WorldPosition.xyz);
-    var halfway = normalize(cameraDir + sun);
-    var specular = pow(max(dot(halfway, normal), 0.0), 50.0);
+    var camera = sceneOptions._cameraPosition.xyz;
+    var viewDir = normalize(camera - WorldPosition.xyz);
+    var halfway = normalize(viewDir + sun);
+    var specular = pow(max(dot(halfway, normal), 0.0), SPECULAR_SHININESS);
 
-    var color = ambient * (lambert + specular);
+    var reflectedDir = reflect(-viewDir, normal);
+    //reversed z coord, because skybox is rendered the same way 
+    var reflected = textureSample(cubeMap, cubeSampler, reflectedDir * vec3f(1, 1, -1));
+
+    //Schlick fresnel
+    //r0 = ((1 - 1.33) / (1 + 1.33)) ^ 2
+    var r0 = 0.02;
+    var fresnel = r0 + (1 - r0) * pow(1 - dot(viewDir, normal), FRESNEL_SHININESS);
+    fresnel *= FRESNEL_STRENGTH;
+
+    //var color = ambient * (lambert + fresnel * specular + reflected * fresnel);
+    //var color = ambient * (lambert + specular * fresnel);
+    var color = ambient * (lambert + specular * fresnel * reflected * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH);
     return color;
 }
 

@@ -24,6 +24,7 @@ export class Renderer {
 
     skybox: Skybox;
     cameraForward: vec3 = vec3.fromValues(0, 0, 0);
+    cameraPos: vec3 = vec3.fromValues(0, 1, 0);
     
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -32,6 +33,7 @@ export class Renderer {
     async init() {
         this.cameraInputs();
         await this.setupDevice();
+        this.skybox = new Skybox(this.device, this.format, this.context, this.canvas);
         this.setupAssets();
         await this.setupPipeline();
         const inputs = document.getElementsByClassName("listened-for-input");
@@ -42,7 +44,6 @@ export class Renderer {
                 this.writeOptionBuffer();
             });
         }
-        this.skybox = new Skybox(this.device, this.format, this.context, this.canvas);
         await this.skybox.init(this.cameraForward);
         this.render();
     }
@@ -80,8 +81,15 @@ export class Renderer {
                 Math.cos(pitch) * Math.cos(yaw),
             );
             
-            this.skybox.cameraForward = this.cameraForward;
+            if (this.cameraForward) this.skybox.cameraForward = this.cameraForward;
             
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === "w")
+                vec3.add(this.cameraPos, this.cameraPos, vec3.scale(vec3.create(), this.cameraForward, 0.1));
+            if (event.key === "s")
+                vec3.add(this.cameraPos, this.cameraPos, vec3.scale(vec3.create(), this.cameraForward, -0.1));
         });
     }
 
@@ -113,7 +121,7 @@ export class Renderer {
         });
 
         this.sceneOptions_uniformBuffer = this.device.createBuffer({
-            size: 4,
+            size: 32,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
@@ -147,7 +155,18 @@ export class Renderer {
                         type: "uniform"
                     }
                 },
-
+                {
+                    binding: 4,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    texture: {
+                        viewDimension: "cube"
+                    }
+                },
+                {
+                    binding: 5,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    sampler: {}
+                },
             ]
         });
 
@@ -177,6 +196,14 @@ export class Renderer {
                     resource: {
                         buffer: this.sceneOptions_uniformBuffer
                     }
+                },
+                { 
+                    binding: 4, 
+                    resource: (await this.skybox.createSkyboxTexture()).createView({ dimension: 'cube' }) 
+                },
+                { 
+                    binding: 5, 
+                    resource: this.device.createSampler() 
                 },
             ]
         });
@@ -209,18 +236,30 @@ export class Renderer {
                 stripIndexFormat: "uint16"
             },
 
+            depthStencil: {
+                depthWriteEnabled: true,
+                depthCompare: 'less',
+                format: 'depth24plus',
+            },
+
             layout: pipelineLayout
         });
     }
 
     setupAssets() {
-        this.mesh = new Plane(3, 254, this.device);
+        this.mesh = new Plane(3, 250, this.device);
     }
 
     render() {
         if (!this)
             console.log("this is null");
         this.writeBuffers();
+
+        const depthTexture = this.device.createTexture({
+            size: [this.canvas.width, this.canvas.height, 1],
+            format: 'depth24plus',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT
+        });
 
         const commandEncoder: GPUCommandEncoder = this.device.createCommandEncoder();
         const textureView: GPUTextureView = this.context.getCurrentTexture().createView();
@@ -230,7 +269,13 @@ export class Renderer {
                 clearValue: {r: 133.0/255.0, g: 211.0/255.0, b: 241.0/255.0, a: 0},
                 loadOp: "load",
                 storeOp: "store"
-            }]
+            }],
+            depthStencilAttachment: {
+                view: depthTexture.createView(),
+                depthClearValue: 1,
+                depthLoadOp: "clear",
+                depthStoreOp: "store"
+            }
         });
 
         renderpass.setPipeline(this.pipeline);
@@ -251,7 +296,7 @@ export class Renderer {
         mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 10);
 
         const view = mat4.create();
-        const cameraPos = vec3.fromValues(0, 1, 0);
+        const cameraPos = this.cameraPos;
         const forwardWorld = vec3.create();
         vec3.add(forwardWorld, this.cameraForward, cameraPos);
         mat4.lookAt(view, cameraPos, forwardWorld, [0, 1, 0]);
@@ -288,7 +333,10 @@ export class Renderer {
         this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 20, new Float32Array([_baseSpeed]));
         this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 24, new Float32Array([_maxWaves]));
 
-        this.device.queue.writeBuffer(this.sceneOptions_uniformBuffer, 0, new Float32Array([_sunPosition]));
+        this.device.queue.writeBuffer(this.sceneOptions_uniformBuffer, 16, new Float32Array([_sunPosition]));
+        const cam = [this.cameraPos[0], this.cameraPos[1], this.cameraPos[2], 1];
+        //console.log(`camera buffer written: ${cam}`);
+        this.device.queue.writeBuffer(this.sceneOptions_uniformBuffer, 0, new Float32Array(cam));
     }
 
     
