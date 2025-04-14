@@ -19,12 +19,13 @@ export class Renderer {
     sceneOptions_uniformBuffer: GPUBuffer;
     bindGroup: GPUBindGroup;
     pipeline: GPURenderPipeline;
+    depthTextureView: GPUTextureView;
 
     mesh: Plane;
 
     skybox: Skybox;
     cameraForward: vec3 = vec3.fromValues(0, 0, 0);
-    cameraPos: vec3 = vec3.fromValues(0, 1, 0);
+    cameraPos: vec3 = vec3.fromValues(-6, 3, 0);
     
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -244,6 +245,15 @@ export class Renderer {
 
             layout: pipelineLayout
         });
+
+        const depthTexture = this.device.createTexture({
+            size: [this.canvas.width, this.canvas.height, 1],
+            format: 'depth24plus',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT
+        });
+
+        this.depthTextureView = depthTexture.createView();
+
     }
 
     setupAssets() {
@@ -255,12 +265,7 @@ export class Renderer {
             console.log("this is null");
         this.writeBuffers();
 
-        const depthTexture = this.device.createTexture({
-            size: [this.canvas.width, this.canvas.height, 1],
-            format: 'depth24plus',
-            usage: GPUTextureUsage.RENDER_ATTACHMENT
-        });
-
+        
         const commandEncoder: GPUCommandEncoder = this.device.createCommandEncoder();
         const textureView: GPUTextureView = this.context.getCurrentTexture().createView();
         const renderpass: GPURenderPassEncoder = commandEncoder.beginRenderPass({
@@ -271,7 +276,7 @@ export class Renderer {
                 storeOp: "store"
             }],
             depthStencilAttachment: {
-                view: depthTexture.createView(),
+                view: this.depthTextureView,
                 depthClearValue: 1,
                 depthLoadOp: "clear",
                 depthStoreOp: "store"

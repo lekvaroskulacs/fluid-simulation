@@ -72,9 +72,6 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         
         let phase = seed; //+ f32(wave) * PI / 2.0; 
 
-        //let sample1 = textureSampleLevel(noiseTexture, noiseSampler, vec2<f32>(f32(wave) / f32(maxWaves), 0.0), 0.0);
-        //let sample2 = textureSampleLevel(noiseTexture, noiseSampler, vec2<f32>(1.0 - f32(wave) / f32(maxWaves), 1.0), 0.0);
-
         let direction = vec2<f32>(sin(seed), cos(seed));
         seed += seedIter;
 
@@ -101,9 +98,6 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     var tangent: vec3<f32> = normalize(vec3<f32>(0, dy_dx, 1));
     var binormal: vec3<f32> = normalize(vec3<f32>(1, dy_dz, 0));
 
-    //var tangent: vec3<f32> = normalize(vec3<f32>(1, 0, dy_dx + 0.0001));
-    //var binormal: vec3<f32> = normalize(vec3<f32>(0, 1, dy_dz + 0.0001));
-
     var obj_space_normal = normalize(cross(tangent, binormal));
     var world_space_normal = normalize(transformUBO.model * vec4<f32>(obj_space_normal, 0)).xyz;
 
@@ -116,12 +110,12 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
 @fragment
 fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>) -> @location(0) vec4<f32> {
     
-    const SPECULAR_SHININESS = 300.0;
-    const SPECULAR_STRENGTH = 0.7;
+    const SPECULAR_SHININESS = 1000.0;
+    const SPECULAR_STRENGTH = 1.0;
     const FRESNEL_SHININESS = 5.0;
     const FRESNEL_STRENGTH = 1.0;
     const REFLECTION_STRENGTH = 1.0;
-    const DIFFUSE_REFLECTANCE = 1.0;
+    const DIFFUSE_REFLECTANCE = 0.5;
     const SUN_DIRECTION = vec3f(-0.5, 1, 0.5);
     const AMBIENT_RGB = vec3f(153, 179, 216);
     
@@ -148,8 +142,8 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     fresnel *= FRESNEL_STRENGTH;
 
     //var color = ambient * (lambert + fresnel * specular + reflected * fresnel);
-    //var color = ambient * (lambert + specular * fresnel);
-    var color = ambient * (lambert + specular * fresnel * reflected * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH);
+    var color = vec4f(halfway, 1);
+    //var color = ambient * (lambert + specular * fresnel * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH);
     return color;
 }
 
