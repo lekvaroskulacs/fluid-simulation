@@ -110,16 +110,18 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
 @fragment
 fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>) -> @location(0) vec4<f32> {
     
-    const SPECULAR_SHININESS = 1000.0;
+    const SPECULAR_SHININESS = 400.0;
     const SPECULAR_STRENGTH = 1.0;
     const FRESNEL_SHININESS = 5.0;
     const FRESNEL_STRENGTH = 1.0;
-    const REFLECTION_STRENGTH = 1.0;
+    const REFLECTION_STRENGTH = 1;
     const DIFFUSE_REFLECTANCE = 0.5;
-    const SUN_DIRECTION = vec3f(-0.5, 1, 0.5);
+    const SUN_DIRECTION = vec3f(-0.5, 0.2, 0.5);
     const AMBIENT_RGB = vec3f(153, 179, 216);
+    const SPECULAR_RGB = vec3f(255, 255, 0);
     
     var ambient = vec4<f32>(AMBIENT_RGB, 1) / 255;
+    var specularColor = vec4<f32>(SPECULAR_RGB, 1) / 255;
 
     var normal = normalize(Normal.xyz);
     let sunPos = sceneOptions._sunPosition;
@@ -142,7 +144,7 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     fresnel *= FRESNEL_STRENGTH;
 
     //var color = ambient * (lambert + fresnel * specular + reflected * fresnel);
-    var color = vec4f(halfway, 1);
+    var color = ambient * lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
     //var color = ambient * (lambert + specular * fresnel * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH);
     return color;
 }
