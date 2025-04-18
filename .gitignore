@@ -1,4 +1,6 @@
 /dist
 /node_modules
+/skyboxes
+/doc_media
 package-lock.json
 *.txt

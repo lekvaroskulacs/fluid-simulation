@@ -55,6 +55,7 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     let basePhase: f32 = waveOptions._basePhase;
     let baseSpeed: f32 = waveOptions._baseSpeed;
     var amplitudeSum = 0.0;
+    let horizontal_displacement = 0.07;
 
     let maxWaves: i32 = i32(waveOptions._maxWaves);
 
@@ -83,8 +84,8 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         dy_dx += amplitude * cosVal * direction.x * frequency * exp(sinVal - 1) / e;
         dy_dz += amplitude * cosVal * direction.y * frequency * exp(sinVal - 1) / e;
 
-        p.x += direction.x * dy_dx * 0.1;
-        p.z += direction.y * dy_dz * 0.1;
+        p.x += direction.x * dy_dx * horizontal_displacement;
+        p.z += direction.y * dy_dz * horizontal_displacement;
 
         amplitude = amplitude * amplitudeMult;
         frequency = frequency * frequencyMult;
@@ -114,11 +115,11 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     const SPECULAR_STRENGTH = 1.0;
     const FRESNEL_SHININESS = 5.0;
     const FRESNEL_STRENGTH = 1.0;
-    const REFLECTION_STRENGTH = 1;
-    const DIFFUSE_REFLECTANCE = 0.5;
-    const SUN_DIRECTION = vec3f(-0.5, 0.2, 0.5);
-    const AMBIENT_RGB = vec3f(153, 179, 216);
-    const SPECULAR_RGB = vec3f(255, 255, 0);
+    const REFLECTION_STRENGTH = 0.1;
+    const DIFFUSE_REFLECTANCE = 0.2;
+    const SUN_DIRECTION = vec3f(-0.4, 0.2, 0.5);
+    const AMBIENT_RGB = vec3f(28, 163, 236);
+    const SPECULAR_RGB = vec3f(255, 255, 255);
     
     var ambient = vec4<f32>(AMBIENT_RGB, 1) / 255;
     var specularColor = vec4<f32>(SPECULAR_RGB, 1) / 255;
@@ -144,8 +145,8 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     fresnel *= FRESNEL_STRENGTH;
 
     //var color = ambient * (lambert + fresnel * specular + reflected * fresnel);
-    var color = ambient * lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
-    //var color = ambient * (lambert + specular * fresnel * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH);
+    var color = ambient + lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
+    //var color = reflected * 0.8 + lambert + specular * fresnel;
     return color;
 }
 
