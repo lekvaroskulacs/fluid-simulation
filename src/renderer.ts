@@ -168,6 +168,14 @@ export class Renderer {
                     visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
                     sampler: {}
                 },
+                {
+                    binding: 6,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'read-only'
+                    }
+                }
             ]
         });
 
@@ -206,6 +214,10 @@ export class Renderer {
                     binding: 5, 
                     resource: this.device.createSampler() 
                 },
+                {
+                    binding: 6,
+                    resource: (await this.createGaussianTexture()).createView()
+                }
             ]
         });
 
@@ -342,6 +354,39 @@ export class Renderer {
         const cam = [this.cameraPos[0], this.cameraPos[1], this.cameraPos[2], 1];
         //console.log(`camera buffer written: ${cam}`);
         this.device.queue.writeBuffer(this.sceneOptions_uniformBuffer, 0, new Float32Array(cam));
+    }
+
+    async createGaussianTexture() {
+        const data = new Float32Array(256 * 256 * 2);
+        for (let i = 0; i <= data.length; i++) {
+            let idx = i * 2;
+
+            let theta  = 2 * Math.PI * Math.random();
+            let R   = Math.sqrt(-2 * Math.log(Math.random()));
+            let x   = R * Math.cos(theta);
+            let y   = R * Math.sin(theta);
+            
+            // Sigmoid
+            // x = 1 / (1 + Math.exp(-x * 0.5));
+            // y = 1 / (1 + Math.exp(-y * 0.5));
+
+            data[idx] = x;
+            data[idx + 1] = y;
+        }
+
+        const texture = this.device.createTexture({
+            size : [256, 256],
+            format: 'rg32float',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING
+        });
+
+        this.device.queue.writeTexture(
+            {texture}, 
+            data, 
+            {bytesPerRow: 256 * 4 * 2}, 
+            {width: 256, height: 256}
+        );
+        return texture;
     }
 
     

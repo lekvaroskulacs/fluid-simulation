@@ -36,6 +36,8 @@ struct SceneOptions {
 @binding(4) @group(0) var cubeMap: texture_cube<f32>;
 @binding(5) @group(0) var cubeSampler: sampler;
 
+@binding(6) @group(0) var noise: texture_storage_2d<rg32float, read>;
+
 const PI: f32 = 3.141592653589793;
 const e: f32 = 2.718281828459045;
 
@@ -56,7 +58,7 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     let baseSpeed: f32 = waveOptions._baseSpeed;
     var amplitudeSum = 0.0;
 
-    let maxWaves: i32 = i32(waveOptions._maxWaves);
+    let maxWaves: u32 = u32(waveOptions._maxWaves);
 
     let directions: array<vec2<f32>, 4> = array(
         vec2<f32>(1.0, 0.0),   
@@ -68,11 +70,12 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     var seed = 0.0;
     let seedIter = 1.0;
 
-    for (var wave: i32 = 0; wave < maxWaves; wave += 1) {
+    for (var wave: u32 = 0; wave < maxWaves; wave += 1) {
         
         let phase = seed; //+ f32(wave) * PI / 2.0; 
 
-        let direction = vec2<f32>(sin(seed), cos(seed));
+        let noiseId = vec2u(wave / 256, wave % 256);
+        let direction = normalize(vec2f(textureLoad(noise, noiseId).xy));
         seed += seedIter;
 
         let angle = dot(normalize(direction), vec2<f32>(p.x, p.z)) * frequency + time * baseSpeed + phase;
@@ -83,8 +86,8 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         dy_dx += amplitude * cosVal * direction.x * frequency * exp(sinVal - 1) / e;
         dy_dz += amplitude * cosVal * direction.y * frequency * exp(sinVal - 1) / e;
 
-        p.x += direction.x * dy_dx * 0.1;
-        p.z += direction.y * dy_dz * 0.1;
+        p.x += direction.x * dy_dx * 0.05;
+        p.z += direction.y * dy_dz * 0.05;
 
         amplitude = amplitude * amplitudeMult;
         frequency = frequency * frequencyMult;
@@ -114,11 +117,12 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     const SPECULAR_STRENGTH = 1.0;
     const FRESNEL_SHININESS = 5.0;
     const FRESNEL_STRENGTH = 1.0;
-    const REFLECTION_STRENGTH = 1;
-    const DIFFUSE_REFLECTANCE = 0.5;
-    const SUN_DIRECTION = vec3f(-0.5, 0.2, 0.5);
-    const AMBIENT_RGB = vec3f(153, 179, 216);
-    const SPECULAR_RGB = vec3f(255, 255, 0);
+    const REFLECTION_STRENGTH = 0.5;
+    const DIFFUSE_REFLECTANCE = 0.2;
+    const SUN_DIRECTION = vec3f(-0.4, 0.2, 0.5);
+    const AMBIENT_RGB = vec3f(28, 163, 236);
+    const AMBIENT_STRENGTH = 0.8;
+    const SPECULAR_RGB = vec3f(255, 255, 255);
     
     var ambient = vec4<f32>(AMBIENT_RGB, 1) / 255;
     var specularColor = vec4<f32>(SPECULAR_RGB, 1) / 255;
@@ -144,7 +148,7 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     fresnel *= FRESNEL_STRENGTH;
 
     //var color = ambient * (lambert + fresnel * specular + reflected * fresnel);
-    var color = ambient * lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
+    var color = ambient * AMBIENT_STRENGTH + lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
     //var color = ambient * (lambert + specular * fresnel * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH);
     return color;
 }
