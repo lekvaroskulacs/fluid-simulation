@@ -115,7 +115,7 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     const SPECULAR_STRENGTH = 1.0;
     const FRESNEL_SHININESS = 5.0;
     const FRESNEL_STRENGTH = 1.0;
-    const REFLECTION_STRENGTH = 0.1;
+    const REFLECTION_STRENGTH = 0.5;
     const DIFFUSE_REFLECTANCE = 0.2;
     const SUN_DIRECTION = vec3f(-0.4, 0.2, 0.5);
     const AMBIENT_RGB = vec3f(28, 163, 236);
