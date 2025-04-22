@@ -16,7 +16,7 @@ struct WaveOptions {
     _amplitudeMult: f32,
     _frequencyMult: f32,
     _basePhase: f32,
-    _baseSpeed: f32,
+    _horizontalDisplacement: f32,
     _maxWaves: f32
 };
 
@@ -38,14 +38,16 @@ struct SceneOptions {
 
 @binding(6) @group(0) var noise: texture_storage_2d<rg32float, read>;
 
+@binding(7) @group(0) var<storage> translations: array<mat4x4f>;
+
 const PI: f32 = 3.141592653589793;
 const e: f32 = 2.718281828459045;
 
 @vertex 
-fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: u32) -> Fragment {
+fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: u32, @builtin(instance_index) i_id: u32) -> Fragment {
     var output : Fragment;
     var p = vec4<f32>(vertexPosition, 1.0);
-    p = transformUBO.model * p;
+    p = translations[i_id] * p;
 
     var dy_dx: f32 = 0.0; // Partial derivative with respect to x
     var dy_dz: f32 = 0.0; // Partial derivative with respect to y
@@ -55,7 +57,7 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     let amplitudeMult: f32 = waveOptions._amplitudeMult;
     let frequencyMult: f32 = waveOptions._frequencyMult;
     let basePhase: f32 = waveOptions._basePhase;
-    let baseSpeed: f32 = waveOptions._baseSpeed;
+    let horizontalDisplacement: f32 = waveOptions._horizontalDisplacement;
     var amplitudeSum = 0.0;
 
     let maxWaves: u32 = u32(waveOptions._maxWaves);
@@ -78,7 +80,7 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         let direction = normalize(vec2f(textureLoad(noise, noiseId).xy));
         seed += seedIter;
 
-        let angle = dot(normalize(direction), vec2<f32>(p.x, p.z)) * frequency + time * baseSpeed + phase;
+        let angle = dot(normalize(direction), vec2<f32>(p.x, p.z)) * frequency + time + phase;
         let sinVal = sin(angle);
         let cosVal = cos(angle);
 
@@ -86,8 +88,8 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         dy_dx += amplitude * cosVal * direction.x * frequency * exp(sinVal - 1) / e;
         dy_dz += amplitude * cosVal * direction.y * frequency * exp(sinVal - 1) / e;
 
-        p.x += direction.x * dy_dx * 0.05;
-        p.z += direction.y * dy_dz * 0.05;
+        p.x += direction.x * dy_dx * horizontalDisplacement;
+        p.z += direction.y * dy_dz * horizontalDisplacement;
 
         amplitude = amplitude * amplitudeMult;
         frequency = frequency * frequencyMult;
@@ -102,7 +104,7 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
     var binormal: vec3<f32> = normalize(vec3<f32>(1, dy_dz, 0));
 
     var obj_space_normal = normalize(cross(tangent, binormal));
-    var world_space_normal = normalize(transformUBO.model * vec4<f32>(obj_space_normal, 0)).xyz;
+    var world_space_normal = normalize(translations[i_id] * vec4<f32>(obj_space_normal, 0)).xyz;
 
     output.Normal = vec4<f32>(world_space_normal, 1);
     output.WorldPosition = p;

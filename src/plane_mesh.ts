@@ -1,10 +1,16 @@
+import { mat4 } from "gl-matrix";
+
 export class Plane {
 
     vertexBuffer: GPUBuffer;
     bufferLayout: GPUVertexBufferLayout;
     indexBuffer: GPUBuffer;
 
-    constructor(size: number, detail: number, device: GPUDevice) {
+    translationMatrix: mat4;
+
+    constructor(size: number, detail: number, translationMatrix: mat4, device: GPUDevice) {
+        this.translationMatrix = translationMatrix;
+        
         const _vert_data = [];
         for(let y = 0; y <= detail; y++) {
             for(let x = 0; x <= detail; x++) {
@@ -31,7 +37,7 @@ export class Plane {
             if (y < detail - 1)
                 _index_data.push(top, bottom + 1);
         }
-        const indices = new Uint16Array(_index_data);
+        const indices = new Uint32Array(_index_data);
 
         this.vertexBuffer = device.createBuffer({
             size: vertices.length * Float32Array.BYTES_PER_ELEMENT, 
@@ -43,12 +49,12 @@ export class Plane {
         this.vertexBuffer.unmap();
 
         this.indexBuffer = device.createBuffer({
-            size: indices.length * Uint16Array.BYTES_PER_ELEMENT,
+            size: indices.length * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
             mappedAtCreation: true
         })
 
-        new Uint16Array(this.indexBuffer.getMappedRange()).set(indices);
+        new Uint32Array(this.indexBuffer.getMappedRange()).set(indices);
         this.indexBuffer.unmap();
 
         this.bufferLayout = {

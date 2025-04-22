@@ -22,7 +22,7 @@ window.addEventListener("resize", () => {
 (<HTMLInputElement> document.getElementById("frequency")).value = localStorage.getItem("frequency") ?? "1";
 (<HTMLInputElement> document.getElementById("frequencyMultiplier")).value = localStorage.getItem("frequencyMultiplier") ?? "1";
 (<HTMLInputElement> document.getElementById("basePhase")).value = localStorage.getItem("basePhase") ?? "0";
-(<HTMLInputElement> document.getElementById("baseSpeed")).value = localStorage.getItem("baseSpeed") ?? "1";
+(<HTMLInputElement> document.getElementById("horizontalDisplacement")).value = localStorage.getItem("horizontalDisplacement") ?? "0";
 (<HTMLInputElement> document.getElementById("maxWaves")).value = localStorage.getItem("maxWaves") ?? "1";
 (<HTMLInputElement> document.getElementById("sunPosition")).value = localStorage.getItem("sunPosition") ?? "1";
 //renderParticles(new Circle(100, 100, 50));

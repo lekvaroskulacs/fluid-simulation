@@ -17,11 +17,13 @@ export class Renderer {
     time_uniformBuffer: GPUBuffer;
     waveOptions_uniformBuffer: GPUBuffer;
     sceneOptions_uniformBuffer: GPUBuffer;
+    translationMatrices: GPUBuffer;
+
     bindGroup: GPUBindGroup;
     pipeline: GPURenderPipeline;
     depthTextureView: GPUTextureView;
 
-    mesh: Plane;
+    meshes: Plane[];
 
     skybox: Skybox;
     cameraForward: vec3 = vec3.fromValues(0, 0, 0);
@@ -29,6 +31,7 @@ export class Renderer {
     
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
+        this.meshes = [];
     }
 
     async init() {
@@ -126,6 +129,12 @@ export class Renderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
+        this.translationMatrices = this.device.createBuffer({
+            size: this.meshes.length * 16 * 4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: false
+        })
+
         const bindGroupLayout = this.device.createBindGroupLayout({
             entries: [
                 {
@@ -175,6 +184,13 @@ export class Renderer {
                         format: 'rg32float',
                         access: 'read-only'
                     }
+                },
+                {
+                    binding: 7,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
                 }
             ]
         });
@@ -217,6 +233,12 @@ export class Renderer {
                 {
                     binding: 6,
                     resource: (await this.createGaussianTexture()).createView()
+                },
+                {
+                    binding: 7,
+                    resource: {
+                        buffer: this.translationMatrices
+                    }
                 }
             ]
         });
@@ -231,7 +253,7 @@ export class Renderer {
                     code: shader
                 }),
                 entryPoint: "vs_main",
-                buffers: [this.mesh.bufferLayout]
+                buffers: [this.meshes[0].bufferLayout]
             },
 
             fragment: {
@@ -246,7 +268,7 @@ export class Renderer {
 
             primitive: {
                 topology: "triangle-strip",
-                stripIndexFormat: "uint16"
+                stripIndexFormat: "uint32"
             },
 
             depthStencil: {
@@ -269,13 +291,21 @@ export class Renderer {
     }
 
     setupAssets() {
-        this.mesh = new Plane(3, 250, this.device);
+        const gridSize = 4;
+        for (let i = 0; i < gridSize * gridSize; i++) {
+            let x = Math.floor(i / gridSize);
+            let z = i % gridSize;
+            x = x - gridSize / 2.0;
+            z = z - gridSize / 2.0;
+            this.meshes.push(new Plane(1, 200, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
+        }
+        
     }
 
     render() {
         if (!this)
             console.log("this is null");
-        this.writeBuffers();
+        
 
         
         const commandEncoder: GPUCommandEncoder = this.device.createCommandEncoder();
@@ -296,14 +326,17 @@ export class Renderer {
         });
 
         renderpass.setPipeline(this.pipeline);
-        renderpass.setVertexBuffer(0, this.mesh.vertexBuffer);
-        renderpass.setIndexBuffer(this.mesh.indexBuffer, "uint16");
         renderpass.setBindGroup(0, this.bindGroup);
-        renderpass.drawIndexed(this.mesh.indexBuffer.size / Uint16Array.BYTES_PER_ELEMENT);
-        renderpass.end();
+        this.writeBuffers();
         
-        this.device.queue.submit([commandEncoder.finish()]);
 
+        renderpass.setVertexBuffer(0, this.meshes[0].vertexBuffer);
+        renderpass.setIndexBuffer(this.meshes[0].indexBuffer, "uint32");
+        renderpass.drawIndexed(this.meshes[0].indexBuffer.size / Uint32Array.BYTES_PER_ELEMENT, this.meshes.length);
+            
+        
+        renderpass.end();
+        this.device.queue.submit([commandEncoder.finish()]);
         requestAnimationFrame(() => this.render());
     }
 
@@ -317,13 +350,15 @@ export class Renderer {
         const forwardWorld = vec3.create();
         vec3.add(forwardWorld, this.cameraForward, cameraPos);
         mat4.lookAt(view, cameraPos, forwardWorld, [0, 1, 0]);
-        
-        const model = mat4.create();
-        mat4.scale(model, model, [1, 1, 1]);
 
         const time = performance.now() / 1000;
 
-        this.device.queue.writeBuffer(this.uniformBuffer, 0, <ArrayBuffer>model);
+        const matrixData = new Float32Array(16 * this.meshes.length);
+        this.meshes.forEach( (plane, idx) => {
+            matrixData.set(plane.translationMatrix, idx * 16);
+        });
+
+        this.device.queue.writeBuffer(this.translationMatrices, 0, matrixData.buffer);
         this.device.queue.writeBuffer(this.uniformBuffer, 64, <ArrayBuffer>view);
         this.device.queue.writeBuffer(this.uniformBuffer, 128, <ArrayBuffer>projection);
         this.device.queue.writeBuffer(this.time_uniformBuffer, 0, new Float32Array([time]));
@@ -337,7 +372,7 @@ export class Renderer {
         const _amplitudeMult: number = +(localStorage.getItem("amplitudeMultiplier") ?? 1);
         const _frequencyMult: number = +(localStorage.getItem("frequencyMultiplier") ?? 1);
         const _basePhase: number = +(localStorage.getItem("basePhase") ?? 0);
-        const _baseSpeed: number = +(localStorage.getItem("baseSpeed") ?? 1);
+        const _horizontalDisplacement: number = +(localStorage.getItem("horizontalDisplacement") ?? 1);
         const _maxWaves: number = +(localStorage.getItem("maxWaves") ?? 1);
 
         const _sunPosition: number = +(localStorage.getItem("sunPosition") ?? 1);
@@ -347,7 +382,7 @@ export class Renderer {
         this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 8, new Float32Array([_amplitudeMult]));
         this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 12, new Float32Array([_frequencyMult]));
         this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 16, new Float32Array([_basePhase]));
-        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 20, new Float32Array([_baseSpeed]));
+        this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 20, new Float32Array([_horizontalDisplacement]));
         this.device.queue.writeBuffer(this.waveOptions_uniformBuffer, 24, new Float32Array([_maxWaves]));
 
         this.device.queue.writeBuffer(this.sceneOptions_uniformBuffer, 16, new Float32Array([_sunPosition]));
