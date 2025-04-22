@@ -1,6 +1,8 @@
 import jonswap from './shaders/generate_jonswap.wgsl'
 import fft from './shaders/fft_water.wgsl'
+import spectrum from './shaders/time_spectrum.wgsl'
 import { create } from 'domain';
+import { buffer } from 'stream/consumers';
 
 export class FFTRenderer {
 
@@ -13,9 +15,15 @@ export class FFTRenderer {
 
     jonswapBindGroup: GPUBindGroup;
     jonswapPipeline: GPUComputePipeline;
+    spectrumBindGroup: GPUBindGroup;
+    spectrumPipeline: GPUComputePipeline;
     testBindGroup: GPUBindGroup;
     testPipeline: GPURenderPipeline;
+
+    timeBuffer: GPUBuffer;
+
     spectrumTexture: GPUTexture;
+    timeSpectrumTexture: GPUTexture;
 
     gridSize = 256; // Grid size
 
@@ -27,7 +35,7 @@ export class FFTRenderer {
         await this.setupDevice();
         await this.setupPipeline();
         await this.computeSpectrum();
-        await this.test();
+        await this.render();
     }
 
     async setupDevice() {
@@ -51,6 +59,15 @@ export class FFTRenderer {
                 GPUTextureUsage.TEXTURE_BINDING |
                 GPUTextureUsage.COPY_SRC,
         });
+
+        this.timeSpectrumTexture = this.device.createTexture({
+            size: [this.gridSize, this.gridSize],
+            format: 'rg32float',
+            usage:
+                GPUTextureUsage.STORAGE_BINDING |
+                GPUTextureUsage.TEXTURE_BINDING |
+                GPUTextureUsage.COPY_SRC,
+        })
 
         const jonswapLayout = this.device.createBindGroupLayout({
             entries: [
@@ -95,9 +112,50 @@ export class FFTRenderer {
                         viewDimension: '2d',
                     }
                 },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'read-only',
+                        viewDimension: '2d',
+                    }
+                },
             ]
         });
 
+        const spectrumLayout = this.device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'read-only',
+                        viewDimension: '2d'
+                    }
+                },
+
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'write-only',
+                        viewDimension: '2d'
+                    }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: 'uniform'
+                    }
+                }
+            ]
+        })
+
+        
         this.jonswapPipeline = this.device.createComputePipeline({
             layout: this.device.createPipelineLayout({bindGroupLayouts: [jonswapLayout]}),
             compute: {
@@ -124,9 +182,21 @@ export class FFTRenderer {
                 targets: [{ format: this.format }]
             },
         });
+        
+        this.spectrumPipeline = this.device.createComputePipeline({
+            layout: this.device.createPipelineLayout({bindGroupLayouts: [spectrumLayout]}),
+            compute: {
+                module: this.device.createShaderModule({
+                    code: spectrum
+                }),
+                entryPoint: "cs_main"
+            }
+        });
 
         const textureView = this.spectrumTexture.createView();
         const gaussianTexture = await this.createGaussianTexture();
+        const spectrumView = this.timeSpectrumTexture.createView();
+
         this.jonswapBindGroup = this.device.createBindGroup({
             layout: this.jonswapPipeline.getBindGroupLayout(0),
             entries: [
@@ -151,9 +221,37 @@ export class FFTRenderer {
                     binding: 1,
                     resource: gaussianTexture.createView()
                 },
+                {
+                    binding: 2,
+                    resource: spectrumView
+                }
             ]
         })
 
+        this.timeBuffer = this.device.createBuffer({
+            size: 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
+        this.spectrumBindGroup = this.device.createBindGroup({
+            layout: this.spectrumPipeline.getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: textureView
+                },
+                {
+                    binding: 1,
+                    resource: spectrumView
+                }, 
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.timeBuffer
+                    }
+                }
+            ]
+        })
     }
 
     async computeSpectrum() {
@@ -168,7 +266,6 @@ export class FFTRenderer {
 
 
         this.device.queue.submit([commandEncoder.finish()]);
-        
         
     }
 
@@ -202,12 +299,33 @@ export class FFTRenderer {
             {bytesPerRow: this.gridSize * 4 * 2}, 
             {width: this.gridSize, height: this.gridSize}
         );
-        console.log(data);
         return texture;
     }
 
+    async computeSpectrumEvolution() {
+        const time = performance.now() / 1000;
+        this.device.queue.writeBuffer(this.timeBuffer, 0, new Float32Array([time]).buffer);
+
+        const commandEncoder = this.device.createCommandEncoder();
+
+        const computePass = commandEncoder.beginComputePass();
+        computePass.setPipeline(this.spectrumPipeline);
+        computePass.setBindGroup(0, this.spectrumBindGroup);
+        computePass.dispatchWorkgroups(Math.ceil(this.gridSize / 8), Math.ceil(this.gridSize / 8));
+        computePass.end();
+
+        this.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    async render() {
+        this.computeSpectrumEvolution();
+        this.test();
+
+        //requestAnimationFrame(() => this.render());
+    }
+
     async test() {
-        
+        /*
         const buffer = this.device.createBuffer({
             size: this.gridSize * this.gridSize * 8,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
@@ -223,9 +341,9 @@ export class FFTRenderer {
         await buffer.mapAsync(GPUMapMode.READ);
         const spectrumData = new Float32Array(buffer.getMappedRange());
         console.log(spectrumData); // Inspect real/imaginary values
-        
+        */
 
-        commandEncoder = this.device.createCommandEncoder();
+        var commandEncoder = this.device.createCommandEncoder();
         const textureView: GPUTextureView = this.context.getCurrentTexture().createView();
         const renderPass: GPURenderPassEncoder = commandEncoder.beginRenderPass({
             colorAttachments: [{
