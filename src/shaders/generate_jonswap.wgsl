@@ -10,6 +10,8 @@ const FETCH = 10.0; // Distance that wind can blow unobstructed
 
 @group(0) @binding(0) var spectrum: texture_storage_2d<rg32float, write>;
 @group(0) @binding(1) var random: texture_storage_2d<rg32float, read>;
+@group(0) @binding(2) var waveData: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(3) var conjugateSpectrum: texture_storage_2d<rg32float, write>;
 
 fn rand(uv: vec2u) -> f32 {
     var seed = f32(uv.x) * 1973.0 + f32(uv.y) * 9277.0;
@@ -39,7 +41,7 @@ fn jonswap(omega: f32, theta: f32) -> f32 {
 
 //Formulas taken from https://github.com/gasgiant/FFT-Ocean
 @compute @workgroup_size(8, 8)
-fn cs_main(@builtin(global_invocation_id) id: vec3u) {
+fn initial_spectrum(@builtin(global_invocation_id) id: vec3u) {
 
     let N = f32(textureDimensions(spectrum).x);
     let deltaK = 2 * PI / L;
@@ -55,6 +57,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     let S = jonswap(omega, kAngle);
 
     let H0K = vec2f(textureLoad(random, id.xy).xy) * sqrt(2 * S * abs(dOmegadk) / kLength * deltaK * deltaK);
+    let minusID = vec2u(u32(N) - id.x, u32(N) - id.y);
 
     textureStore(spectrum, id.xy, vec4f(H0K.x, H0K.y, 0.0, 1.0));
+    textureStore(conjugateSpectrum, minusID.xy, vec4f(H0K.x, -H0K.y, 0.0, 1.0));
+    textureStore(waveData, id.xy, vec4f(k.x, 1 / kLength, k.y, omega));
 }

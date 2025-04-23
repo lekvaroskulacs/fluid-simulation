@@ -19,14 +19,18 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOutput {
 @group(0) @binding(0) var tex: texture_storage_2d<rg32float, read>;
 @group(0) @binding(1) var random: texture_storage_2d<rg32float, read>;
 @group(0) @binding(2) var timeSpectrum: texture_storage_2d<rg32float, read>;
+@group(0) @binding(3) var waveData: texture_storage_2d<rgba32float, read>;
+@group(0) @binding(4) var conjugateSpectrum: texture_storage_2d<rg32float, read>;
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let texCoord = vec2u(input.Position.xy);
     var pixel = textureLoad(tex, texCoord);
-    var noise = textureLoad(random, texCoord);
+    //var noise = textureLoad(random, texCoord);
     var spectrum = textureLoad(timeSpectrum, texCoord);
+    var wave = textureLoad(waveData, texCoord);
+    var con = textureLoad(conjugateSpectrum, texCoord);
     
-    return vec4f(spectrum.r, spectrum.g, 0.0, 1.0);  
+    return vec4f(spectrum.x, 0.0, 0.0, 0.1);  
     
 }

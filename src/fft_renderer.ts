@@ -15,6 +15,7 @@ export class FFTRenderer {
 
     jonswapBindGroup: GPUBindGroup;
     jonswapPipeline: GPUComputePipeline;
+    conjugatePipeline: GPUComputePipeline;
     spectrumBindGroup: GPUBindGroup;
     spectrumPipeline: GPUComputePipeline;
     testBindGroup: GPUBindGroup;
@@ -23,7 +24,9 @@ export class FFTRenderer {
     timeBuffer: GPUBuffer;
 
     spectrumTexture: GPUTexture;
+    spectrumConjugateTexture: GPUTexture;
     timeSpectrumTexture: GPUTexture;
+    waveData: GPUTexture;
 
     gridSize = 256; // Grid size
 
@@ -60,6 +63,15 @@ export class FFTRenderer {
                 GPUTextureUsage.COPY_SRC,
         });
 
+        this.spectrumConjugateTexture = this.device.createTexture({
+            size: [this.gridSize, this.gridSize],
+            format: "rg32float",
+            usage:
+                GPUTextureUsage.STORAGE_BINDING |
+                GPUTextureUsage.TEXTURE_BINDING |
+                GPUTextureUsage.COPY_SRC,
+        });
+
         this.timeSpectrumTexture = this.device.createTexture({
             size: [this.gridSize, this.gridSize],
             format: 'rg32float',
@@ -67,6 +79,16 @@ export class FFTRenderer {
                 GPUTextureUsage.STORAGE_BINDING |
                 GPUTextureUsage.TEXTURE_BINDING |
                 GPUTextureUsage.COPY_SRC,
+        })
+
+        this.waveData = this.device.createTexture({
+            size: [this.gridSize, this.gridSize],
+            format: 'rgba32float',
+            usage:
+                GPUTextureUsage.STORAGE_BINDING |
+                GPUTextureUsage.TEXTURE_BINDING |
+                GPUTextureUsage.COPY_SRC,
+
         })
 
         const jonswapLayout = this.device.createBindGroupLayout({
@@ -89,6 +111,24 @@ export class FFTRenderer {
                         viewDimension: '2d',
                     }
                 },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rgba32float',
+                        access: 'write-only',
+                        viewDimension: '2d'
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'write-only',
+                        viewDimension: '2d'
+                    }
+                },
             ]
         });
 
@@ -105,7 +145,7 @@ export class FFTRenderer {
                 },
                 {
                     binding: 1,
-                    visibility: GPUShaderStage.FRAGMENT,
+                    visibility: GPUShaderStage.VERTEX,
                     storageTexture: {
                         format: 'rg32float',
                         access: 'read-only',
@@ -119,6 +159,24 @@ export class FFTRenderer {
                         format: 'rg32float',
                         access: 'read-only',
                         viewDimension: '2d',
+                    }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    storageTexture: {
+                        format: 'rgba32float',
+                        access: 'read-only',
+                        viewDimension: '2d'
+                    }
+                },
+                {
+                    binding: 4,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'read-only',
+                        viewDimension: '2d'
                     }
                 },
             ]
@@ -151,7 +209,25 @@ export class FFTRenderer {
                     buffer: {
                         type: 'uniform'
                     }
-                }
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rgba32float',
+                        access: 'read-only',
+                        viewDimension: '2d'
+                    }
+                },
+                {
+                    binding: 4,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'read-only',
+                        viewDimension: '2d'
+                    }
+                },
             ]
         })
 
@@ -162,10 +238,10 @@ export class FFTRenderer {
                 module: this.device.createShaderModule({
                     code: jonswap
                 }),
-                entryPoint: "cs_main",
+                entryPoint: "initial_spectrum",
             },
         });
-        
+
         this.testPipeline = this.device.createRenderPipeline({
             layout: this.device.createPipelineLayout({bindGroupLayouts: [renderLayout]}),
             vertex: {
@@ -194,8 +270,10 @@ export class FFTRenderer {
         });
 
         const textureView = this.spectrumTexture.createView();
+        const spectrumConjugateView = this.spectrumConjugateTexture.createView();
         const gaussianTexture = await this.createGaussianTexture();
         const spectrumView = this.timeSpectrumTexture.createView();
+        const waveDataView = this.waveData.createView();
 
         this.jonswapBindGroup = this.device.createBindGroup({
             layout: this.jonswapPipeline.getBindGroupLayout(0),
@@ -208,6 +286,14 @@ export class FFTRenderer {
                     binding: 1,
                     resource: gaussianTexture.createView()
                 },
+                {
+                    binding: 2,
+                    resource: waveDataView
+                },
+                {
+                    binding: 3,
+                    resource: spectrumConjugateView
+                }
             ],
         });
         this.testBindGroup = this.device.createBindGroup({
@@ -224,6 +310,14 @@ export class FFTRenderer {
                 {
                     binding: 2,
                     resource: spectrumView
+                },
+                {
+                    binding: 3,
+                    resource: waveDataView
+                },
+                {
+                    binding: 4,
+                    resource: spectrumConjugateView
                 }
             ]
         })
@@ -249,6 +343,14 @@ export class FFTRenderer {
                     resource: {
                         buffer: this.timeBuffer
                     }
+                },
+                {
+                    binding: 3,
+                    resource: waveDataView
+                },
+                {
+                    binding: 4,
+                    resource: spectrumConjugateView
                 }
             ]
         })
@@ -321,7 +423,7 @@ export class FFTRenderer {
         this.computeSpectrumEvolution();
         this.test();
 
-        //requestAnimationFrame(() => this.render());
+        requestAnimationFrame(() => this.render());
     }
 
     async test() {
@@ -332,7 +434,7 @@ export class FFTRenderer {
         });
         var commandEncoder = this.device.createCommandEncoder();
         commandEncoder.copyTextureToBuffer(
-            { texture: this.spectrumTexture },
+            { texture: this.timeSpectrumTexture },
             { buffer, bytesPerRow: this.gridSize * 8 },
             [this.gridSize, this.gridSize]
         );
