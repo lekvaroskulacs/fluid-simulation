@@ -19,7 +19,7 @@ fn rand(uv: vec2u) -> f32 {
     return fract(seed) * 2.0 * PI;
 }
 
-//JONSWAP function based on: https://wikiwaves.org/Ocean-Wave_Spectra#JONSWAP_Spectrum
+// JONSWAP function based on: https://wikiwaves.org/Ocean-Wave_Spectra#JONSWAP_Spectrum
 fn jonswap(omega: f32, theta: f32) -> f32 {
     // Pierson-Moskowitz spectrum
     const peak_frequency_mod = 1.0;
@@ -39,7 +39,8 @@ fn jonswap(omega: f32, theta: f32) -> f32 {
     return S_pm * gamma_factor * dir_spread;
 }
 
-//Formulas taken from https://github.com/gasgiant/FFT-Ocean
+// Simulating ocean water, Jerry Tessendorf 2004., formula (42)
+// Instead of the Philip's spectrum, using JONSWAP instead 
 @compute @workgroup_size(8, 8)
 fn initial_spectrum(@builtin(global_invocation_id) id: vec3u) {
 
@@ -48,7 +49,7 @@ fn initial_spectrum(@builtin(global_invocation_id) id: vec3u) {
     let nx = f32(id.x) - f32(N) / 2.0;
     let ny = f32(id.y) - f32(N) / 2.0;
     let k = vec2f(nx, ny) * deltaK;
-    let kLength = sqrt(k.x * k.x + k.y * k.y);
+    let kLength = sqrt(k.x * k.x + k.y * k.y); // corresponds to 
 
     let kAngle = atan2(k.y, k.x);
     let omega = sqrt(GRAVITY * kLength);
@@ -57,6 +58,7 @@ fn initial_spectrum(@builtin(global_invocation_id) id: vec3u) {
     let S = jonswap(omega, kAngle);
 
     let H0K = vec2f(textureLoad(random, id.xy).xy) * sqrt(2 * S * abs(dOmegadk) / kLength * deltaK * deltaK);
+    // We store the conjugate values as well for the time evolution
     let minusID = vec2u(u32(N) - id.x, u32(N) - id.y);
 
     textureStore(spectrum, id.xy, vec4f(H0K.x, H0K.y, 0.0, 1.0));
