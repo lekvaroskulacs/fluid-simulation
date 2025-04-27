@@ -1,13 +1,11 @@
-// Algorithm based on: https://users.aalto.fi/~laines10/FFT.html
-
 @group(0) @binding(0) var<storage> input: texture_storage_2d<rg32float, read>;
 @group(0) @binding(1) var<storage> output: texture_storage_2d<rg32float, write>;
 @group(0) @binding(2) var<storage> twiddles: array<vec2f>;
 
-@compute @workgroup_size(64, 1)
+@compute @workgroup_size(1, 64)
 fn cs_main(@builtin(global_invocation_id) id: vec3u) {
-    let row = id.y;
-    let n = id.x;
+    let col = id.x;
+    let n = id.y;
     let N = 256;
     let stage = u32(log2(f32(N))); // Total stages = log2(N)
     let halfN = N / 2;

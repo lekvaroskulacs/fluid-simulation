@@ -58,7 +58,7 @@ fn initial_spectrum(@builtin(global_invocation_id) id: vec3u) {
     let S = jonswap(omega, kAngle);
 
     let H0K = vec2f(textureLoad(random, id.xy).xy) * sqrt(2 * S * abs(dOmegadk) / kLength * deltaK * deltaK);
-    // We store the conjugate values as well for the time evolution
+    // We store the conjugate values as well, because IFFT requires these
     let minusID = vec2u(u32(N) - id.x, u32(N) - id.y);
 
     textureStore(spectrum, id.xy, vec4f(H0K.x, H0K.y, 0.0, 1.0));

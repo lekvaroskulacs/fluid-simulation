@@ -24,12 +24,14 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    
     let texCoord = vec2u(input.Position.xy);
     var pixel = textureLoad(tex, texCoord);
     //var noise = textureLoad(random, texCoord);
     var spectrum = textureLoad(timeSpectrum, texCoord);
     var wave = textureLoad(waveData, texCoord);
     var con = textureLoad(conjugateSpectrum, texCoord);
+    
     
     return vec4f(spectrum.x, 0.0, 0.0, 0.1);  
     

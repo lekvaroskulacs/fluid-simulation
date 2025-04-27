@@ -1,8 +1,10 @@
 import jonswap from './shaders/generate_jonswap.wgsl'
 import fft from './shaders/fft_water.wgsl'
 import spectrum from './shaders/time_spectrum.wgsl'
-import { create } from 'domain';
-import { buffer } from 'stream/consumers';
+import fft_horizontal from './shaders/fft_horizontal.wgsl'
+import fft_vertical from './shaders/fft_vertical.wgsl'
+import fft_scale from './shaders/fft_scale.wgsl'
+import { isBuffer } from 'node:util'
 
 export class FFTRenderer {
 
@@ -38,6 +40,7 @@ export class FFTRenderer {
         await this.setupDevice();
         await this.setupPipeline();
         await this.computeSpectrum();
+        this.fftSetup();
         await this.render();
     }
 
@@ -421,9 +424,10 @@ export class FFTRenderer {
 
     async render() {
         this.computeSpectrumEvolution();
+        this.fftCompute();
         this.test();
 
-        requestAnimationFrame(() => this.render());
+        //requestAnimationFrame(() => this.render());
     }
 
     async test() {
@@ -463,5 +467,159 @@ export class FFTRenderer {
 
         this.device.queue.submit([commandEncoder.finish()]);
 
+    }
+
+    fftPipelines: GPUComputePipeline[];
+    fftBindGroups: GPUBindGroup[];
+    propertiesBuffer: GPUBuffer;
+
+    fftSetup() {
+        this.fftPipelines = [];
+        this.fftBindGroups = [];
+        const N = 256;
+        const ifftInputTexture = this.device.createTexture({
+            size: [N, N],
+            format: "rg32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+        });
+
+        const ifftTempTexture1 = this.device.createTexture({
+            size: [N, N],
+            format: "rg32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING, 
+        });
+
+        const ifftTempTexture2 = this.device.createTexture({
+            size: [N, N],
+            format: "rg32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING, 
+        });
+
+        const ifftOutputTexture = this.device.createTexture({
+            size: [N, N],
+            format: "r32float",
+            usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+        });
+
+        const twiddleBuffer = this.device.createBuffer({
+            size: N * 2 * 4, // N complex numbers (real, imag)
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: true,
+          });
+          
+        const twiddleData = new Float32Array(twiddleBuffer.getMappedRange());
+        for (let k = 0; k < N; k++) {
+          const angle = (2 * Math.PI * k) / N;
+          twiddleData[2 * k] = Math.cos(angle);
+          twiddleData[2 * k + 1] = Math.sin(angle);
+        }
+        twiddleBuffer.unmap();
+
+        this.propertiesBuffer = this.device.createBuffer({
+            size: 4 * 2,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
+        const horizontalPipeline = this.device.createComputePipeline({
+            layout: 'auto',
+            compute: {
+                module: this.device.createShaderModule({
+                    code: fft_horizontal
+                }),
+                entryPoint: 'cs_main',
+            },
+        });
+          
+        const verticalPipeline = this.device.createComputePipeline({
+            layout: 'auto',
+            compute: {
+                module: this.device.createShaderModule({
+                    code: fft_horizontal
+                }),
+                entryPoint: 'cs_main',
+            },
+        });
+          
+        const scalingPipeline = this.device.createComputePipeline({
+            layout: 'auto',
+            compute: {
+                module: this.device.createShaderModule({
+                    code: fft_scale
+                }),
+                entryPoint: 'cs_main',
+            },
+        });
+
+        const horizontalBindGroup = this.device.createBindGroup({
+            layout: horizontalPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: ifftInputTexture.createView() }, 
+                { binding: 1, resource: ifftTempTexture1.createView() }, 
+                { binding: 2, resource: { buffer: twiddleBuffer } }, 
+                { binding: 3, resource: { buffer: this.propertiesBuffer } }
+            ],
+        });
+        
+        const verticalBindGroup = this.device.createBindGroup({
+            layout: verticalPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: ifftTempTexture1.createView() }, 
+                { binding: 1, resource: ifftTempTexture2.createView() }, 
+                { binding: 2, resource: { buffer: twiddleBuffer } },
+                { binding: 3, resource: { buffer: this.propertiesBuffer } }
+            ],
+        });
+        
+        const scalingBindGroup = this.device.createBindGroup({
+            layout: scalingPipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: ifftTempTexture2.createView() }, 
+                { binding: 1, resource: ifftOutputTexture.createView() },
+            ],
+        });
+
+        this.fftPipelines.push(horizontalPipeline, verticalPipeline, scalingPipeline);
+        this.fftBindGroups.push(horizontalBindGroup, verticalBindGroup, scalingBindGroup);
+    }
+
+    fftCompute() {
+        let N = 256;
+        let pingPong = false;
+        
+        //submitting a commandbuffer 17 times in a frame is crazy, but i dont know what other choice i have
+        //because the properties uniform needs to be updated for every iteration of the fft
+        for (let i = 0; i < Math.log2(N); i++) {
+            const commandEncoder = this.device.createCommandEncoder();
+            this.device.queue.writeBuffer(this.propertiesBuffer, 0, new Float32Array([i]).buffer);
+
+            const horizontalPass = commandEncoder.beginComputePass();
+            horizontalPass.setPipeline(this.fftPipelines[0]);
+            horizontalPass.setBindGroup(0, this.fftBindGroups[0]);
+            horizontalPass.dispatchWorkgroups(Math.ceil(N / 64), N); // 64 threads per row
+            horizontalPass.end();
+            this.device.queue.submit([commandEncoder.finish()]);
+
+        }
+
+        for (let i = 0; i < Math.log2(N); i++) {
+            const commandEncoder = this.device.createCommandEncoder();
+            this.device.queue.writeBuffer(this.propertiesBuffer, 0, new Float32Array([i]).buffer);
+
+            const verticalPass = commandEncoder.beginComputePass();
+            verticalPass.setPipeline(this.fftPipelines[1]);
+            verticalPass.setBindGroup(0, this.fftBindGroups[1]);
+            verticalPass.dispatchWorkgroups(N, Math.ceil(N / 64)); // 64 threads per column
+            verticalPass.end();
+            this.device.queue.submit([commandEncoder.finish()]);
+        }
+        const commandEncoder = this.device.createCommandEncoder();
+        // Scaling pass (extract real part)
+        const scalingPass = commandEncoder.beginComputePass();
+        scalingPass.setPipeline(this.fftPipelines[2]);
+        scalingPass.setBindGroup(0, this.fftBindGroups[2]);
+        scalingPass.dispatchWorkgroups(Math.ceil(N / 8), Math.ceil(N / 8)); // 8x8 workgroup
+        scalingPass.end();
+
+        this.device.queue.submit([commandEncoder.finish()]);
     }
 }
