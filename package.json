@@ -17,6 +17,7 @@
     "@webgpu/types": "^0.1.54",
     "gl-matrix": "^3.4.3",
     "http-server": "^14.1.1",
+    "rand-seed": "^2.1.7",
     "ts-loader": "^9.5.2",
     "ts-shader-loader": "^2.0.2",
     "typescript": "^5.7.3",

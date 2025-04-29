@@ -3,6 +3,7 @@ import { TriangleMesh } from "./triangle_mesh";
 import { mat4, vec3 } from "gl-matrix";
 import { Plane } from "./plane_mesh";
 import { Skybox } from "./skybox";
+import Rand, { PRNG } from 'rand-seed';
 
 export class Renderer {
 
@@ -94,6 +95,8 @@ export class Renderer {
                 vec3.add(this.cameraPos, this.cameraPos, vec3.scale(vec3.create(), this.cameraForward, 0.1));
             if (event.key === "s")
                 vec3.add(this.cameraPos, this.cameraPos, vec3.scale(vec3.create(), this.cameraForward, -0.1));
+            if (event.key === "e")
+                vec3.add(this.cameraPos, this.cameraPos, vec3.scale(vec3.create(), this.cameraForward, 0.01));
         });
     }
 
@@ -242,9 +245,19 @@ export class Renderer {
                 }
             ]
         });
-
+/*
+        const debugLayout = this.device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    storageTexture: {format: 'rgba32float'}
+                }
+            ]
+        })
+*/
         const pipelineLayout = this.device.createPipelineLayout({
-            bindGroupLayouts: [bindGroupLayout]
+            bindGroupLayouts: [bindGroupLayout,]
         });
 
         this.pipeline = this.device.createRenderPipeline({
@@ -291,7 +304,7 @@ export class Renderer {
     }
 
     setupAssets() {
-        const gridSize = 4;
+        const gridSize = 8;
         for (let i = 0; i < gridSize * gridSize; i++) {
             let x = Math.floor(i / gridSize);
             let z = i % gridSize;
@@ -302,7 +315,7 @@ export class Renderer {
         
     }
 
-    render() {
+    async render() {
         if (!this)
             console.log("this is null");
         
@@ -327,6 +340,21 @@ export class Renderer {
 
         renderpass.setPipeline(this.pipeline);
         renderpass.setBindGroup(0, this.bindGroup);
+/*
+        const debugTex = this.device.createTexture({
+            format: 'rgba32float',
+            size: [256, 256],
+            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+        });
+
+        const debugGroup = this.device.createBindGroup({
+            layout: this.pipeline.getBindGroupLayout(1),
+            entries: [
+                { binding: 0, resource: debugTex.createView() }
+            ]
+        });
+        renderpass.setBindGroup(1, debugGroup);
+        */
         this.writeBuffers();
         
 
@@ -338,6 +366,7 @@ export class Renderer {
         renderpass.end();
         this.device.queue.submit([commandEncoder.finish()]);
         requestAnimationFrame(() => this.render());
+
     }
 
 
@@ -393,11 +422,12 @@ export class Renderer {
 
     async createGaussianTexture() {
         const data = new Float32Array(256 * 256 * 2);
+        const rand = new Rand("93b5fac");
         for (let i = 0; i <= data.length; i++) {
             let idx = i * 2;
 
-            let theta  = 2 * Math.PI * Math.random();
-            let R   = Math.sqrt(-2 * Math.log(Math.random()));
+            let theta  = 2 * Math.PI * rand.next();
+            let R   = Math.sqrt(-2 * Math.log(rand.next()));
             let x   = R * Math.cos(theta);
             let y   = R * Math.sin(theta);
             
