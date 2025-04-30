@@ -40,7 +40,7 @@ export class FFTRenderer {
         await this.setupDevice();
         await this.setupPipeline();
         await this.computeSpectrum();
-        this.fftSetup();
+
         await this.render();
     }
 
@@ -424,7 +424,6 @@ export class FFTRenderer {
 
     async render() {
         this.computeSpectrumEvolution();
-        this.fftCompute();
         this.test();
 
         //requestAnimationFrame(() => this.render());
@@ -469,6 +468,7 @@ export class FFTRenderer {
 
     }
 
+/*
     fftPipelines: GPUComputePipeline[];
     fftBindGroups: GPUBindGroup[];
     propertiesBuffer: GPUBuffer;
@@ -554,20 +554,46 @@ export class FFTRenderer {
             layout: horizontalPipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: ifftInputTexture.createView() }, 
-                { binding: 1, resource: ifftTempTexture1.createView() }, 
-                { binding: 2, resource: { buffer: twiddleBuffer } }, 
-                { binding: 3, resource: { buffer: this.propertiesBuffer } }
+                { binding: 1, resource: { buffer: twiddleBuffer } }, 
+                { binding: 2, resource: { buffer: this.propertiesBuffer } }
             ],
         });
         
         const verticalBindGroup = this.device.createBindGroup({
             layout: verticalPipeline.getBindGroupLayout(0),
             entries: [
-                { binding: 0, resource: ifftTempTexture1.createView() }, 
-                { binding: 1, resource: ifftTempTexture2.createView() }, 
-                { binding: 2, resource: { buffer: twiddleBuffer } },
-                { binding: 3, resource: { buffer: this.propertiesBuffer } }
+                { binding: 0, resource: ifftInputTexture.createView() }, 
+                { binding: 1, resource: { buffer: twiddleBuffer } },
+                { binding: 2, resource: { buffer: this.propertiesBuffer } }
             ],
+        });
+
+        const horizontalTempGroup1 = this.device.createBindGroup({
+            layout: horizontalPipeline.getBindGroupLayout(1),
+            entries: [
+                { binding: 0, resource: ifftInputTexture.createView() },
+            ]
+        });
+
+        const horizontalTempGroup2 = this.device.createBindGroup({
+            layout: horizontalPipeline.getBindGroupLayout(1),
+            entries: [
+                { binding: 0, resource: ifftTempTexture2.createView() },
+            ]
+        });
+
+        const verticalTempGroup1 = this.device.createBindGroup({
+            layout: horizontalPipeline.getBindGroupLayout(1),
+            entries: [
+                { binding: 0, resource: ifftInputTexture.createView() },
+            ]
+        });
+
+        const verticalTempGroup2 = this.device.createBindGroup({
+            layout: horizontalPipeline.getBindGroupLayout(1),
+            entries: [
+                { binding: 0, resource: ifftTempTexture2.createView() },
+            ]
         });
         
         const scalingBindGroup = this.device.createBindGroup({
@@ -579,7 +605,7 @@ export class FFTRenderer {
         });
 
         this.fftPipelines.push(horizontalPipeline, verticalPipeline, scalingPipeline);
-        this.fftBindGroups.push(horizontalBindGroup, verticalBindGroup, scalingBindGroup);
+        this.fftBindGroups.push(horizontalBindGroup, verticalBindGroup, scalingBindGroup, horizontalTempGroup1, horizontalTempGroup2, verticalTempGroup1, verticalTempGroup2);
     }
 
     fftCompute() {
@@ -591,26 +617,36 @@ export class FFTRenderer {
         for (let i = 0; i < Math.log2(N); i++) {
             const commandEncoder = this.device.createCommandEncoder();
             this.device.queue.writeBuffer(this.propertiesBuffer, 0, new Float32Array([i]).buffer);
+            this.device.queue.writeBuffer(this.propertiesBuffer, 4, new Float32Array([pingPong ? 1 : 0]).buffer);
 
             const horizontalPass = commandEncoder.beginComputePass();
             horizontalPass.setPipeline(this.fftPipelines[0]);
             horizontalPass.setBindGroup(0, this.fftBindGroups[0]);
+            horizontalPass.setBindGroup(1, this.fftBindGroups[pingPong ? 4 : 3]); // buffer 1
+            horizontalPass.setBindGroup(2, this.fftBindGroups[pingPong ? 3 : 4]); // buffer 2
+            horizontalPass
             horizontalPass.dispatchWorkgroups(Math.ceil(N / 64), N); // 64 threads per row
             horizontalPass.end();
             this.device.queue.submit([commandEncoder.finish()]);
 
+            pingPong = !pingPong;
         }
 
         for (let i = 0; i < Math.log2(N); i++) {
             const commandEncoder = this.device.createCommandEncoder();
             this.device.queue.writeBuffer(this.propertiesBuffer, 0, new Float32Array([i]).buffer);
+            this.device.queue.writeBuffer(this.propertiesBuffer, 4, new Float32Array([pingPong ? 1 : 0]).buffer);
 
             const verticalPass = commandEncoder.beginComputePass();
             verticalPass.setPipeline(this.fftPipelines[1]);
             verticalPass.setBindGroup(0, this.fftBindGroups[1]);
+            verticalPass.setBindGroup(1, this.fftBindGroups[pingPong ? 6 : 5]);
+            verticalPass.setBindGroup(2, this.fftBindGroups[pingPong ? 5 : 6]);
             verticalPass.dispatchWorkgroups(N, Math.ceil(N / 64)); // 64 threads per column
             verticalPass.end();
             this.device.queue.submit([commandEncoder.finish()]);
+
+            pingPong = !pingPong;
         }
         const commandEncoder = this.device.createCommandEncoder();
         // Scaling pass (extract real part)
@@ -622,4 +658,6 @@ export class FFTRenderer {
 
         this.device.queue.submit([commandEncoder.finish()]);
     }
+        */
+
 }
