@@ -1,5 +1,6 @@
 import { FFTRenderer } from "./fft_renderer";
 import { Renderer } from "./renderer";
+import { Tester } from "./test";
 
 const canvas: HTMLCanvasElement = <HTMLCanvasElement>document.getElementById("gfx-main");
 canvas.setAttribute("width", window.innerWidth.toString());
@@ -9,8 +10,9 @@ const fft = true;
 
 if (fft) {
     const renderer = new FFTRenderer(canvas);
+    const tester = new Tester(renderer);
 
-    renderer.init();
+    tester.init();
 } 
 else {
     const renderer = new Renderer(canvas);
