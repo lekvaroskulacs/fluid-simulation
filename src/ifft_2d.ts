@@ -2,6 +2,13 @@ import { off } from 'node:process';
 import ifftShaderCode from './shaders/ifft.wgsl'
 import { util } from 'webpack';
 
+interface TwiddleFactor {
+    twiddleX: number;
+    twiddleY: number;
+    index1: number;
+    index2: number;
+}
+
 export class IFFT2D {
     private device: GPUDevice;
     private pipelines: {
@@ -23,10 +30,59 @@ export class IFFT2D {
         // Create resources
         this.precomputeData();
         //this.createUniformBuffer();
+        //this.precomputeTwiddleFactors(size);
         this.createPipelines();
     }
-
-    //twiddle calculation looks wrong
+    
+    private complexExp(a: [number, number]): [number, number] {
+      return [Math.cos(a[1]) * Math.exp(a[0]), Math.sin(a[1]) * Math.exp(a[0])];
+    }
+/*
+    private precomputeTwiddleFactors(size: number) {
+        const buffer = new Float32Array(size * 2 * 4);
+        
+        // We'll simulate the [1, 8, 1] thread dispatch with id.x always 0
+        const idX = 0;
+        
+        for (let idY = 0; idY < size; idY++) {
+          const b = size >> (idX + 1);  // For size=8, b=4
+          const mult: [number, number] = [0, 2 * Math.PI / size];
+          
+          // Calculate input indices
+          const i = (2 * b * Math.floor(idY / b) + (idY % b)) % size;
+          
+          // Calculate twiddle factor
+          const exponent: [number, number] = [
+            -mult[0] * (Math.floor(idY / b) * b),
+            -mult[1] * (Math.floor(idY / b) * b)
+          ];
+          const [twiddleX, twiddleY] = this.complexExp(exponent);
+          
+          // First write at original position
+          buffer[idY * 4] = twiddleX;
+          buffer[idY * 4 + 1] = twiddleY;
+          buffer[idY * 4 + 2] = i;
+          buffer[idY * 4 + 3] = i + b;
+          
+          // Second write at offset position (with negated twiddle)
+          buffer[(idY + size) * 4] = -twiddleX;
+          buffer[(idY + size) * 4 + 1] = -twiddleY;
+          buffer[(idY + size) * 4 + 2] = i;
+          buffer[(idY + size) * 4 + 3] = i + b;
+        }
+        console.log(buffer);
+    
+        this.precomputedData = this.device.createBuffer({
+            size: buffer.byteLength,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: true
+        });
+        new Float32Array(this.precomputedData.getMappedRange()).set(buffer);
+        this.precomputedData.unmap();
+      }
+        */
+    
+    // twiddle calculation looks wrong
     private precomputeData() {
         const logSize = Math.log2(this.size);
         const data = new Float32Array(this.size * logSize * 4);
@@ -48,7 +104,7 @@ export class IFFT2D {
                 data[idx + 3] = i + b;    // Second index
             }
         }
-        
+        //console.log(data);
         this.precomputedData = this.device.createBuffer({
             size: data.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,

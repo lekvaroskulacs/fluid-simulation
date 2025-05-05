@@ -49,23 +49,25 @@ fn horizontalStepIFFT(@builtin(global_invocation_id) id: vec3<u32>) {
 @compute @workgroup_size(8, 8, 1)
 fn verticalStepIFFT(@builtin(global_invocation_id) id: vec3<u32>) {
     
+    
     let data = precomputedData[uniforms.step * uniforms.size + id.y];
     let indices = vec2<u32>(u32(data.b), u32(data.a));
     let twiddle = vec2<f32>(data.r, -data.g); // Conjugate for IFFT
     
     if (uniforms.pingPong == 1) {
         // Read from input (rgba), write to buffer (rg)
-        let val1 = textureLoad(inputTextureRead, vec2<i32>(i32(indices.x), i32(id.x))).rg;
-        let val2 = textureLoad(inputTextureRead, vec2<i32>(i32(indices.x), i32(id.y))).rg;
+        let val1 = textureLoad(inputTextureRead, vec2<i32>(i32(id.x), i32(indices.x))).rg;
+        let val2 = textureLoad(inputTextureRead, vec2<i32>(i32(id.x), i32(indices.y))).rg;
         let result = val1 + complexMult(twiddle, val2);
         textureStore(bufferTextureWrite, vec2<u32>(id.x, id.y), vec4f(result, 0.0, 1.0));
     } else {
         // Read from buffer (rgba), write to input (rg)
-        let val1 = textureLoad(bufferTextureRead, vec2<i32>(i32(indices.x), i32(id.x))).rg;
-        let val2 = textureLoad(bufferTextureRead, vec2<i32>(i32(indices.x), i32(id.y))).rg;
+        let val1 = textureLoad(bufferTextureRead, vec2<i32>(i32(id.x), i32(indices.x))).rg;
+        let val2 = textureLoad(bufferTextureRead, vec2<i32>(i32(id.x), i32(indices.y))).rg;
         let result = val1 + complexMult(twiddle, val2);
         textureStore(inputTextureWrite, vec2<u32>(id.x, id.y), vec4f(result, 0.0, 1.0));
     }
+    
 
 }
 

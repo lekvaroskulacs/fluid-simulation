@@ -33,6 +33,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var con = textureLoad(conjugateSpectrum, texCoord);
     
     
-    return vec4f(con.x, con.y, con.z, con.w);  
+    return vec4f(con.x + con.y);//, con.y, con.z, con.w);  
     
 }

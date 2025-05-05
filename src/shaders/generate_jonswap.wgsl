@@ -5,7 +5,7 @@ const L = 1000.0; // Physical ocean patch size (meters)
 const WIND_SPEED = 15; // m/s
 const PEAK_ENHANCEMENT = 3.3;
 const DIRECTION = 0.0; // Main wave direction (radians)
-const FETCH = 10.0; // Distance that wind can blow unobstructed
+const FETCH = 100.0; // Distance that wind can blow unobstructed
 
 
 @group(0) @binding(0) var spectrum: texture_storage_2d<rg32float, write>;
@@ -39,6 +39,8 @@ fn jonswap(omega: f32, theta: f32) -> f32 {
     return S_pm * gamma_factor * dir_spread;
 }
 
+const epsilon = 0.00001;
+
 // Simulating ocean water, Jerry Tessendorf 2004., formula (42)
 // Instead of the Philip's spectrum, using JONSWAP instead 
 @compute @workgroup_size(8, 8)
@@ -49,7 +51,11 @@ fn initial_spectrum(@builtin(global_invocation_id) id: vec3u) {
     let nx = f32(id.x) - f32(N) / 2.0;
     let ny = f32(id.y) - f32(N) / 2.0;
     let k = vec2f(nx, ny) * deltaK;
-    let kLength = sqrt(k.x * k.x + k.y * k.y); // corresponds to 
+    var kLength = sqrt(k.x * k.x + k.y * k.y); // corresponds to 
+    //correction for wavevector length (is 0 when x = y = 0)
+    if (kLength < epsilon) {
+        kLength = epsilon;
+    }
 
     let kAngle = atan2(k.y, k.x);
     let omega = sqrt(GRAVITY * kLength);

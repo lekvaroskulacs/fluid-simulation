@@ -126,7 +126,7 @@ export class Tester {
         var commandEncoder = this.renderer.device.createCommandEncoder();
         commandEncoder.copyTextureToBuffer(
             { texture: this.renderer.tempTextures.writable },
-            { buffer, bytesPerRow: this.renderer.gridSize * 8 },
+            { buffer, bytesPerRow: this.renderer.gridSize * 8},
             [this.renderer.gridSize, this.renderer.gridSize]
         );
         this.renderer.device.queue.submit([commandEncoder.finish()]);
@@ -134,7 +134,10 @@ export class Tester {
         await buffer.mapAsync(GPUMapMode.READ);
         const spectrumData = new Float32Array(buffer.getMappedRange());
         console.log(spectrumData); // Inspect real/imaginary values
-    
+        spectrumData.forEach((s,i) => {
+            if (isNaN(s))
+                console.log(i);
+        })
 
         
 
