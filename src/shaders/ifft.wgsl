@@ -49,7 +49,6 @@ fn horizontalStepIFFT(@builtin(global_invocation_id) id: vec3<u32>) {
 @compute @workgroup_size(8, 8, 1)
 fn verticalStepIFFT(@builtin(global_invocation_id) id: vec3<u32>) {
     
-    
     let data = precomputedData[uniforms.step * uniforms.size + id.y];
     let indices = vec2<u32>(u32(data.b), u32(data.a));
     let twiddle = vec2<f32>(data.r, -data.g); // Conjugate for IFFT

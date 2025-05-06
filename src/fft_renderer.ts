@@ -7,6 +7,7 @@ import fft_scale from './shaders/fft_scale.wgsl'
 import { isBuffer } from 'node:util'
 import { IFFT2D } from './ifft_2d'
 import { Tester } from './test'
+import { publicDecrypt } from 'node:crypto'
 
 export class FFTRenderer {
 
@@ -21,6 +22,7 @@ export class FFTRenderer {
     jonswapPipeline: GPUComputePipeline;
     conjugatePipeline: GPUComputePipeline;
     spectrumBindGroup: GPUBindGroup;
+    displacementsBindGroup: GPUBindGroup;
     spectrumPipeline: GPUComputePipeline;
     testBindGroup: GPUBindGroup;
     testPipeline: GPURenderPipeline;
@@ -30,6 +32,8 @@ export class FFTRenderer {
     spectrumTexture: GPUTexture;
     spectrumConjugateTexture: GPUTexture;
     timeSpectrumTexture: GPUTexture;
+    Dy_Dxz: GPUTexture;
+    Dx_Dz: GPUTexture;
     waveData: GPUTexture;
     noise: GPUTexture;
 
@@ -38,8 +42,21 @@ export class FFTRenderer {
     testViews: GPUTextureView[];
     testCallBack: () => any;
 
+    paused: boolean;
+
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
+        this.paused = true;
+
+        document.addEventListener("keydown", e => {
+            if (e.key == "p")
+                this.paused = !this.paused;
+
+            if (!this.paused) {
+                this.render();
+            }
+
+        })
     }
 
     async init() {
@@ -50,7 +67,11 @@ export class FFTRenderer {
 
     async setupDevice() {
         this.adapter = <GPUAdapter> await navigator.gpu?.requestAdapter();
-        this.device = await this.adapter.requestDevice();
+        this.device = await this.adapter.requestDevice({
+            requiredLimits: {
+                maxStorageTexturesPerShaderStage: 8
+            }
+        });
         this.context = <GPUCanvasContext> this.canvas.getContext("webgpu");
         this.format = "bgra8unorm";
         this.context.configure({
@@ -84,6 +105,26 @@ export class FFTRenderer {
         });
 
         this.timeSpectrumTexture = this.device.createTexture({
+            size: [this.gridSize, this.gridSize],
+            format: 'rg32float',
+            usage:
+                GPUTextureUsage.STORAGE_BINDING |
+                GPUTextureUsage.TEXTURE_BINDING |
+                GPUTextureUsage.COPY_SRC        |
+                GPUTextureUsage.COPY_DST,
+        });
+
+        this.Dy_Dxz = this.device.createTexture({
+            size: [this.gridSize, this.gridSize],
+            format: 'rg32float',
+            usage:
+                GPUTextureUsage.STORAGE_BINDING |
+                GPUTextureUsage.TEXTURE_BINDING |
+                GPUTextureUsage.COPY_SRC        |
+                GPUTextureUsage.COPY_DST,
+        });
+
+        this.Dx_Dz = this.device.createTexture({
             size: [this.gridSize, this.gridSize],
             format: 'rg32float',
             usage:
@@ -198,6 +239,27 @@ export class FFTRenderer {
                     }
                 },
             ]
+        });
+
+        const displacementsBindGroupLayout = this.device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'write-only'
+                    }
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    storageTexture: {
+                        format: 'rg32float',
+                        access: 'write-only'
+                    }
+                }
+            ]
         })
 
         // Pipelines
@@ -212,7 +274,7 @@ export class FFTRenderer {
         });
 
         this.spectrumPipeline = this.device.createComputePipeline({
-            layout: this.device.createPipelineLayout({bindGroupLayouts: [spectrumLayout]}),
+            layout: this.device.createPipelineLayout({bindGroupLayouts: [spectrumLayout, displacementsBindGroupLayout]}),
             compute: {
                 module: this.device.createShaderModule({
                     code: spectrum
@@ -279,6 +341,20 @@ export class FFTRenderer {
             ]
         })
 
+        this.displacementsBindGroup = this.device.createBindGroup({
+            layout: this.spectrumPipeline.getBindGroupLayout(1),
+            entries: [
+                {
+                    binding: 0,
+                    resource: this.Dy_Dxz.createView()
+                },
+                {
+                    binding: 1,
+                    resource: this.Dx_Dz.createView()
+                }
+            ]
+        });
+
     }
 
     async createGaussianTexture() {
@@ -331,6 +407,7 @@ export class FFTRenderer {
         const computePass = commandEncoder.beginComputePass();
         computePass.setPipeline(this.spectrumPipeline);
         computePass.setBindGroup(0, this.spectrumBindGroup);
+        computePass.setBindGroup(1, this.displacementsBindGroup);
         computePass.dispatchWorkgroups(Math.ceil(this.gridSize / 8), Math.ceil(this.gridSize / 8));
         computePass.end();
 
@@ -339,20 +416,21 @@ export class FFTRenderer {
 
     tempTextures: { readable: GPUTexture, writable: GPUTexture };
     async render() {
+
         this.computeSpectrumEvolution();
         
         const ifft = new IFFT2D(this.device, this.gridSize);
         const inputTextures = IFFT2D.createTexturePair(this.device, this.gridSize);
-        //this.tempTextures = IFFT2D.createTexturePair(this.device, this.gridSize);
+        this.tempTextures = IFFT2D.createTexturePair(this.device, this.gridSize);
 
         const cmd = this.device.createCommandEncoder();
         cmd.copyTextureToTexture(
-            { texture: this.spectrumTexture },
+            { texture: this.Dy_Dxz },
             { texture: inputTextures.readable },
             [this.gridSize, this.gridSize]
         );
         cmd.copyTextureToTexture(
-            { texture: this.spectrumTexture },
+            { texture: this.Dy_Dxz },
             { texture: inputTextures.writable },
             [this.gridSize, this.gridSize]
         );
@@ -362,7 +440,11 @@ export class FFTRenderer {
         this.device.queue.submit([commandEncoder.finish()]);
         
         this.testCallBack();
-        //requestAnimationFrame(() => this.render());
+
+        if (this.paused)
+            return;
+
+        requestAnimationFrame(() => this.render());
     }
 
 

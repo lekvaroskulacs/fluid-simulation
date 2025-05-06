@@ -232,14 +232,12 @@ export class IFFT2D {
             );
             passEncoder.end();
 
-            // Copy write -> read if needed
-            if (i < logSize - 1) {
-                this.copyBetweenPasses(
-                    commandEncoder,
-                    pingPong ? bufferWrite : inputWrite,
-                    pingPong ? bufferRead : inputRead
-                );
-            }
+            this.copyBetweenPasses(
+                commandEncoder,
+                pingPong ? bufferWrite : inputWrite,
+                pingPong ? bufferRead : inputRead
+            );
+
         }
 
         // Vertical pass
@@ -262,13 +260,11 @@ export class IFFT2D {
             );
             passEncoder.end();
 
-            if (i < logSize - 1) {
-                this.copyBetweenPasses(
-                    commandEncoder,
-                    pingPong ? bufferWrite : inputWrite,
-                    pingPong ? bufferRead : inputRead
-                );
-            }
+            this.copyBetweenPasses(
+                commandEncoder,
+                pingPong ? bufferWrite : inputWrite,
+                pingPong ? bufferRead : inputRead
+            );
         }
 
         // Final copy if needed

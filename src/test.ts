@@ -94,7 +94,7 @@ export class Tester {
             entries: [
                 {
                     binding: 0,
-                    resource: this.renderer.spectrumTexture.createView(),
+                    resource: this.renderer.Dy_Dxz.createView(),
                 },
                 {
                     binding: 1,
@@ -118,7 +118,8 @@ export class Tester {
     }
 
     async test() {
-        
+        this.testSetup();
+    /*
         const buffer = this.renderer.device.createBuffer({
             size: this.renderer.gridSize * this.renderer.gridSize * 8,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
@@ -138,8 +139,8 @@ export class Tester {
             if (isNaN(s))
                 console.log(i);
         })
+*/
 
-        
 
         var commandEncoder = this.renderer.device.createCommandEncoder();
         const textureView: GPUTextureView = this.renderer.context.getCurrentTexture().createView();
