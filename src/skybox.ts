@@ -17,12 +17,15 @@ export class Skybox {
 
     cameraForward: vec3;
 
+    paused: boolean;
+
 
     constructor(device: GPUDevice, format: GPUTextureFormat, context: GPUCanvasContext, canvas: HTMLCanvasElement) {
         this.device = device;
         this.format = format;
         this.context = context;
         this.canvas = canvas;
+        this.paused = true;
     }
 
     async init(cameraForward: vec3) {
@@ -177,7 +180,12 @@ export class Skybox {
 
         this.device.queue.submit([commandEncoder.finish()]);
 
+        if (this.paused) return;
         requestAnimationFrame(() => this.renderSkybox());
+    }
+
+    pauseSwitch() {
+        this.paused = !this.paused
     }
 
 }

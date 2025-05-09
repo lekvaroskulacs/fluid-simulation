@@ -37,6 +37,22 @@ export class Plane {
             if (y < detail - 1)
                 _index_data.push(top, bottom + 1);
         }
+            
+           /*
+        for(let y = 0; y < detail; y++) {
+            for(let x = 0; x < detail; x++) {
+                const bottomLeft = y * (detail + 1) + x;
+                const bottomRight = bottomLeft + 1;
+                const topLeft = (y + 1) * (detail + 1) + x;
+                const topRight = topLeft + 1;
+                
+                // First triangle (bottom-left to top-left to bottom-right)
+                _index_data.push(bottomLeft, topLeft, bottomRight);
+                // Second triangle (bottom-right to top-left to top-right)
+                _index_data.push(bottomRight, topLeft, topRight);
+            }
+        }
+            */
         const indices = new Uint32Array(_index_data);
 
         this.vertexBuffer = device.createBuffer({

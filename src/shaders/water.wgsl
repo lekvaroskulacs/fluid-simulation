@@ -45,11 +45,8 @@ struct SceneOptions {
 const PI: f32 = 3.141592653589793;
 const e: f32 = 2.718281828459045;
 
-@vertex 
-fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: u32, @builtin(instance_index) i_id: u32) -> Fragment {
-    var output : Fragment;
-    var p = vec4<f32>(vertexPosition, 1.0);
-    p = translations[i_id] * p;
+fn evaluateWave(pos: vec2<f32>) -> vec3<f32> {
+    var p = vec4f(pos.x, 0, pos.y, 0);
 
     var dy_dx: f32 = 0.0; // Partial derivative with respect to x
     var dy_dz: f32 = 0.0; // Partial derivative with respect to y
@@ -76,14 +73,15 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
 
     var smoothed_dy_dx = 0.0;
     var smoothed_dy_dz = 0.0;
-    let smoothing_factor = 0.05;
+    let smoothing_factor = 0.1;
 
     for (var wave: u32 = 0; wave < maxWaves; wave += 1) {
         
         let phase = seed; //+ f32(wave) * PI / 2.0; 
 
         let noiseId = vec2u(wave / 256, wave % 256);
-        let direction = normalize(vec2f(textureLoad(noise, noiseId).xy));
+        //let direction = normalize(vec2f(textureLoad(noise, noiseId).xy));
+        let direction = normalize(vec2f(sin(seed), cos(seed)));
         seed += seedIter;
 
         let angle = dot(normalize(direction), vec2<f32>(p.x, p.z)) * frequency + time + phase;
@@ -104,23 +102,39 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
         frequency = frequency * frequencyMult;
         amplitudeSum += amplitude;
     }
-    dy_dx = smoothed_dy_dx;
-    dy_dz = smoothed_dy_dz;
+    //dy_dx = smoothed_dy_dx;
+    //dy_dz = smoothed_dy_dz;
 
     p.y = p.y / amplitudeSum; 
     dy_dx /= amplitudeSum;
     dy_dz /= amplitudeSum;
 
-    var tangent: vec3<f32> = normalize(vec3<f32>(0, dy_dx, 1));
-    var binormal: vec3<f32> = normalize(vec3<f32>(1, dy_dz, 0));
+    return vec3f(p.y, dy_dx, dy_dz);
+}
+
+@vertex 
+fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: u32, @builtin(instance_index) i_id: u32) -> Fragment {
+    var output : Fragment;
+    var p = vec4<f32>(vertexPosition, 1.0);
+    p = translations[i_id] * p;
+
+    
+
+    //p = vec4f(p.x, evaluateWave(p.xz), p.z, 1.0);
+    
+    let center = vec2f(p.x, p.z);
+    let values = evaluateWave(center);
+
+
+    var tangent: vec3<f32> = normalize(vec3<f32>(0, values.y, 1));
+    var binormal: vec3<f32> = normalize(vec3<f32>(1, values.z, 0));
 
     var obj_space_normal = normalize(cross(tangent, binormal));
     var world_space_normal = normalize(translations[i_id] * vec4<f32>(obj_space_normal, 0)).xyz;
 
-
-
-    output.Normal = vec4<f32>(world_space_normal, 1);
-    output.WorldPosition = p;
+    //output.Normal = vec4<f32>(world_space_normal, 1);
+    output.Normal = vec4<f32>(obj_space_normal, 1.0);
+    output.WorldPosition = vec4f(p.x, values.x, p.z, 1.0);
     output.Position = transformUBO.projection * transformUBO.view * output.WorldPosition;
 
     return output;
@@ -132,9 +146,10 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     const SPECULAR_STRENGTH = 2.0;
     const FRESNEL_SHININESS = 5.0;
     const FRESNEL_STRENGTH = 1.0;
-    const REFLECTION_STRENGTH = 1;
+    const REFLECTION_STRENGTH = 0.5;
     const DIFFUSE_REFLECTANCE = 1;
     const SUN_DIRECTION = vec3f(-0.4, 0.2, 0.5);
+    const SUN_INTENSITY = 1.0;
     const AMBIENT_RGB = vec3f(17, 64, 77);
     const AMBIENT_STRENGTH = 0.2;
     const SPECULAR_RGB = vec3f(255, 255, 255);
@@ -143,11 +158,13 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     var ambient = vec4<f32>(AMBIENT_RGB, 1) / 255;
     var specularColor = vec4<f32>(SPECULAR_RGB, 1) / 255;
 
+    
+
     var camera = sceneOptions._cameraPosition.xyz;
     var viewDir = normalize(camera - WorldPosition.xyz);
     var normal = normalize(Normal.xyz);
 
-    if (dot(normal, vec3f(0, 1, 0)) < 0.1) {
+    if (dot(normal, vec3f(0, 1, 0)) < 0.2) {
         normal = vec3f(0, 1, 0);
     }
     
@@ -161,15 +178,23 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     var sun = normalize(SUN_DIRECTION);
     var diffuse = max(dot(sun, normal), 0.0) * DIFFUSE_REFLECTANCE * ambient;
 
+    let wrap = 0.8; // tweak for softness — 0.4 to 0.8 is typical
+    let dotNL = dot(normal, sun);
+    let wrappedDiffuse = ((dotNL + wrap) / (1.0 + wrap)) * SUN_INTENSITY;
+    let sssColor = ambient; // reflected color
+    let sss = wrappedDiffuse * sssColor;
+
     var halfway = normalize(viewDir + sun);
     var specular = pow(max(dot(halfway, normal), 0.0), SPECULAR_SHININESS) * SPECULAR_STRENGTH;
 
     var reflectedDir = reflect(-viewDir, normal);
     //reversed z coord, because skybox is rendered the same way 
-    var reflected = textureSample(cubeMap, cubeSampler, reflectedDir * vec3f(1, 1, -1));
+    var reflected = textureSample(cubeMap, cubeSampler, reflectedDir * vec3f(1, 1, -1)) * REFLECTION_STRENGTH;
 
     //var color = ambient * AMBIENT_STRENGTH + lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
-    var color = mix(diffuse, reflected, fresnel) + specular * fresnel;
+    //var color = sss + mix(diffuse, reflected, fresnel) + specular * fresnel;
+    //var color = sss;
+    var color =  sss + specular * fresnel + reflected * fresnel;
     return vec4f(acesToneMapper(color.xyz), 1.0);
 
     //return Normal;
