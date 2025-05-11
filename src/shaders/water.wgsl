@@ -38,7 +38,7 @@ struct SceneOptions {
 
 @binding(6) @group(0) var noise: texture_storage_2d<rg32float, read>;
 
-@binding(7) @group(0) var<storage> translations: array<mat4x4f>;
+@binding(0) @group(1) var<storage> translations: array<mat4x4f>;
 
 //@binding(0) @group(1) var normals: texture_storage_2d<rgba32float, write>;
 

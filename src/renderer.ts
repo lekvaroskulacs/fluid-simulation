@@ -19,13 +19,26 @@ export class Renderer {
     time_uniformBuffer: GPUBuffer;
     waveOptions_uniformBuffer: GPUBuffer;
     sceneOptions_uniformBuffer: GPUBuffer;
-    translationMatrices: GPUBuffer;
-
+    translationMatrices: {
+        lod0: GPUBuffer,
+        lod1: GPUBuffer,
+        lod2: GPUBuffer
+    }
+    translationGroup: {
+        lod0: GPUBindGroup,
+        lod1: GPUBindGroup,
+        lod2: GPUBindGroup
+    }
     bindGroup: GPUBindGroup;
     pipeline: GPURenderPipeline;
     depthTextureView: GPUTextureView;
 
-    meshes: Plane[];
+    meshes: {
+        lod0: Plane[],
+        lod1: Plane[],
+        lod2: Plane[],
+        totalLength: () => number
+    }
 
     skybox: Skybox;
     cameraForward: vec3 = vec3.fromValues(0, 0, 0);
@@ -37,7 +50,9 @@ export class Renderer {
     
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
-        this.meshes = [];
+        this.meshes = { lod0: [], lod1: [], lod2: [],
+            totalLength: () => { return this.meshes.lod0.length + this.meshes.lod1.length + this.meshes.lod2.length }
+        };
         this.previousFrameTime = performance.now() / 1000000;
         this.deltaTime = 0;
 
@@ -156,11 +171,25 @@ export class Renderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
-        this.translationMatrices = this.device.createBuffer({
-            size: this.meshes.length * 16 * 4,
+        const lod0 = this.device.createBuffer({
+            size: this.meshes.lod0.length * 16 * 4,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
             mappedAtCreation: false
         })
+
+        const lod1 = this.device.createBuffer({
+            size: this.meshes.lod1.length * 16 * 4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: false
+        })
+        
+        const lod2 = this.device.createBuffer({
+            size: this.meshes.lod2.length * 16 * 4,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            mappedAtCreation: false
+        })
+
+        this.translationMatrices = { lod0: lod0, lod1: lod1, lod2: lod2}
 
         const bindGroupLayout = this.device.createBindGroupLayout({
             entries: [
@@ -212,13 +241,6 @@ export class Renderer {
                         access: 'read-only'
                     }
                 },
-                {
-                    binding: 7,
-                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-                    buffer: {
-                        type: "read-only-storage"
-                    }
-                }
             ]
         });
 
@@ -261,14 +283,58 @@ export class Renderer {
                     binding: 6,
                     resource: (await this.createGaussianTexture()).createView()
                 },
+            ]
+        });
+
+        const translationsLayout = this.device.createBindGroupLayout({
+            entries: [
+            {
+                    binding: 0,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+                    buffer: {
+                        type: "read-only-storage"
+                    }
+            }]
+        })
+
+        const bindgourpsLod0 = this.device.createBindGroup({
+            layout: translationsLayout,
+            entries: [
                 {
-                    binding: 7,
+                    binding: 0,
                     resource: {
-                        buffer: this.translationMatrices
+                        buffer: this.translationMatrices.lod0
                     }
                 }
             ]
-        });
+        })
+
+        const bindgourpsLod1 = this.device.createBindGroup({
+            layout: translationsLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.translationMatrices.lod1
+                    }
+                }
+            ]
+        })
+
+        const bindgourpsLod2 = this.device.createBindGroup({
+            layout: translationsLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: this.translationMatrices.lod2
+                    }
+                }
+            ]
+        })
+
+        this.translationGroup = { lod0: bindgourpsLod0, lod1: bindgourpsLod1, lod2: bindgourpsLod2}
+
 /*
         const debugLayout = this.device.createBindGroupLayout({
             entries: [
@@ -281,7 +347,7 @@ export class Renderer {
         })
 */
         const pipelineLayout = this.device.createPipelineLayout({
-            bindGroupLayouts: [bindGroupLayout,]
+            bindGroupLayouts: [bindGroupLayout, translationsLayout]
         });
 
         this.pipeline = this.device.createRenderPipeline({
@@ -290,7 +356,7 @@ export class Renderer {
                     code: shader
                 }),
                 entryPoint: "vs_main",
-                buffers: [this.meshes[0].bufferLayout]
+                buffers: [this.meshes.lod0[0].bufferLayout]
             },
 
             fragment: {
@@ -328,13 +394,29 @@ export class Renderer {
     }
 
     setupAssets() {
-        const gridSize = 6;
+        const gridSize = 10;
         for (let i = 0; i < gridSize * gridSize; i++) {
             let x = Math.floor(i / gridSize);
             let z = i % gridSize;
-            x = x - gridSize / 2.0;
-            z = z - gridSize / 2.0;
-            this.meshes.push(new Plane(1, 256, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(2 * x, 0, 2 * z)), this.device));
+            x = (x - gridSize / 2.0) * 2; 
+            z = (z - gridSize / 2.0) * 2;
+            // Simple LOD
+            var detail = 10;
+            console.log(i + ": " + vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) + "\n" + vec3.fromValues(x, 0, z))
+            if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < 5) {
+                detail = 256;
+                console.log(256);
+                this.meshes.lod0.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
+            }
+            else if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < 10) {
+                detail = 60;
+                console.log(60);
+                this.meshes.lod1.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
+            }
+            else {
+                detail = 10;
+                this.meshes.lod2.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
+            }    
         }
         
     }
@@ -359,29 +441,25 @@ export class Renderer {
             }
         });
 
-        renderpass.setPipeline(this.pipeline);
-        renderpass.setBindGroup(0, this.bindGroup);
-/*
-        const debugTex = this.device.createTexture({
-            format: 'rgba32float',
-            size: [256, 256],
-            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-        });
-
-        const debugGroup = this.device.createBindGroup({
-            layout: this.pipeline.getBindGroupLayout(1),
-            entries: [
-                { binding: 0, resource: debugTex.createView() }
-            ]
-        });
-        renderpass.setBindGroup(1, debugGroup);
-        */
         this.writeBuffers();
         
+        renderpass.setPipeline(this.pipeline);
+        renderpass.setBindGroup(0, this.bindGroup);
+        
+        renderpass.setBindGroup(1, this.translationGroup.lod0);
+        renderpass.setVertexBuffer(0, this.meshes.lod0[0].vertexBuffer);
+        renderpass.setIndexBuffer(this.meshes.lod0[0].indexBuffer, "uint32");
+        renderpass.drawIndexed(this.meshes.lod0[0].indexBuffer.size / Uint32Array.BYTES_PER_ELEMENT, this.meshes.lod0.length);
 
-        renderpass.setVertexBuffer(0, this.meshes[0].vertexBuffer);
-        renderpass.setIndexBuffer(this.meshes[0].indexBuffer, "uint32");
-        renderpass.drawIndexed(this.meshes[0].indexBuffer.size / Uint32Array.BYTES_PER_ELEMENT, this.meshes.length);
+        renderpass.setBindGroup(1, this.translationGroup.lod1);
+        renderpass.setVertexBuffer(0, this.meshes.lod1[0].vertexBuffer);
+        renderpass.setIndexBuffer(this.meshes.lod1[0].indexBuffer, "uint32");
+        renderpass.drawIndexed(this.meshes.lod1[0].indexBuffer.size / Uint32Array.BYTES_PER_ELEMENT, this.meshes.lod1.length);
+
+        renderpass.setBindGroup(1, this.translationGroup.lod2);
+        renderpass.setVertexBuffer(0, this.meshes.lod2[0].vertexBuffer);
+        renderpass.setIndexBuffer(this.meshes.lod2[0].indexBuffer, "uint32");
+        renderpass.drawIndexed(this.meshes.lod2[0].indexBuffer.size / Uint32Array.BYTES_PER_ELEMENT, this.meshes.lod2.length);
             
         
         renderpass.end();
@@ -408,12 +486,26 @@ export class Renderer {
 
         const time = performance.now() / 1000;
 
-        const matrixData = new Float32Array(16 * this.meshes.length);
-        this.meshes.forEach( (plane, idx) => {
-            matrixData.set(plane.translationMatrix, idx * 16);
+        const matrixData0 = new Float32Array(16 * this.meshes.lod0.length);
+        const matrixData1 = new Float32Array(16 * this.meshes.lod1.length);
+        const matrixData2 = new Float32Array(16 * this.meshes.lod2.length);
+        this.meshes.lod0.forEach( (plane, idx) => {
+            matrixData0.set(plane.translationMatrix, idx * 16);
+        });
+        this.meshes.lod1.forEach( (plane, idx) => {
+            matrixData1.set(plane.translationMatrix, idx * 16);
+        });
+        this.meshes.lod2.forEach( (plane, idx) => {
+            matrixData2.set(plane.translationMatrix, idx * 16);
         });
 
-        this.device.queue.writeBuffer(this.translationMatrices, 0, matrixData.buffer);
+
+        console.log(matrixData0);
+        console.log(matrixData1);
+        console.log(matrixData2);
+        this.device.queue.writeBuffer(this.translationMatrices.lod0, 0, matrixData0.buffer);
+        this.device.queue.writeBuffer(this.translationMatrices.lod1, 0, matrixData1.buffer);
+        this.device.queue.writeBuffer(this.translationMatrices.lod2, 0, matrixData2.buffer);
         this.device.queue.writeBuffer(this.uniformBuffer, 64, <ArrayBuffer>view);
         this.device.queue.writeBuffer(this.uniformBuffer, 128, <ArrayBuffer>projection);
         this.device.queue.writeBuffer(this.time_uniformBuffer, 0, new Float32Array([time]));
