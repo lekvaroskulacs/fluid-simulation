@@ -158,8 +158,6 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     var ambient = vec4<f32>(AMBIENT_RGB, 1) / 255;
     var specularColor = vec4<f32>(SPECULAR_RGB, 1) / 255;
 
-    
-
     var camera = sceneOptions._cameraPosition.xyz;
     var viewDir = normalize(camera - WorldPosition.xyz);
     var normal = normalize(Normal.xyz);

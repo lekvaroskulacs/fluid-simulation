@@ -6,6 +6,12 @@ import { Skybox } from "./skybox";
 import Rand, { PRNG } from 'rand-seed';
 import { AdaptiveWaterTessellation } from "./plane_generation";
 
+interface LODData {
+    lod0: Plane[];
+    lod1: Plane[];
+    lod2: Plane[];
+}
+
 export class Renderer {
 
     canvas: HTMLCanvasElement
@@ -39,10 +45,13 @@ export class Renderer {
         lod2: Plane[],
         totalLength: () => number
     }
+    lod0Dist = 10;
+    lod1Dist = 20;
+    gridSize = 30;
 
     skybox: Skybox;
     cameraForward: vec3 = vec3.fromValues(0, 0, 0);
-    cameraPos: vec3 = vec3.fromValues(4, 0.5, -5);
+    cameraPos: vec3 = vec3.fromValues(0, 0.5, 0);
 
     paused: boolean;
     previousFrameTime: number;
@@ -53,7 +62,7 @@ export class Renderer {
         this.meshes = { lod0: [], lod1: [], lod2: [],
             totalLength: () => { return this.meshes.lod0.length + this.meshes.lod1.length + this.meshes.lod2.length }
         };
-        this.previousFrameTime = performance.now() / 1000000;
+        this.previousFrameTime = performance.now() / 1000;
         this.deltaTime = 0;
 
         this.paused = true;
@@ -150,7 +159,60 @@ export class Renderer {
         });
     }
 
+    lodsReadyForProcessing = true;
+    async recalculateLODs() {
+        this.lodsReadyForProcessing = false;
+        const chunkAmount = 2;
+        let currentChunk = 0;
+
+        const lod0: Plane[] = [];
+        const lod1: Plane[] = [];
+        const lod2: Plane[] = [];
+
+        const processChunk = () => {
+
+            for (let i = currentChunk; i < Math.min(currentChunk + chunkAmount, this.gridSize * this.gridSize); i++) {
+                let x = Math.floor(i / this.gridSize);
+                let y = i % this.gridSize;
+                const worldX = (x - this.gridSize / 2.0) * 2;
+                const worldZ = (y - this.gridSize / 2.0) * 2;
+
+                const distance = vec3.distance(vec3.fromValues(worldX, 0, worldZ), this.cameraPos);
+
+                let detail = 10;
+                if (distance < this.lod0Dist) {
+                    detail = 256;
+                    lod0.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
+                } else if (distance < this.lod1Dist) {
+                    detail = 60;
+                    lod1.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
+                } else {
+                    detail = 10;
+                    lod2.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
+                }
+            }
+
+            currentChunk += chunkAmount;
+
+            if (currentChunk < this.gridSize * this.gridSize) {
+                requestAnimationFrame(processChunk);
+            } else {
+                // Update LOD meshes
+                this.meshes.lod0 = lod0;
+                this.meshes.lod1 = lod1;
+                this.meshes.lod2 = lod2;
+                this.lodsReadyForProcessing = true;
+            }
+        };
+
+        processChunk();
+    }
+
     async setupPipeline() {
+        const maxLodCount = 1000;
+        const lodBufferSize = maxLodCount * 16 * 4;
+        const lod2BufferSize = maxLodCount * 100 * 16 * 4; // lod2 is the most frequent
+
         this.uniformBuffer = this.device.createBuffer({
             size: 64 * 3,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -172,21 +234,24 @@ export class Renderer {
         });
 
         const lod0 = this.device.createBuffer({
-            size: this.meshes.lod0.length * 16 * 4,
+            size: lodBufferSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: false
+            mappedAtCreation: false,
+            label: 'lod0'
         })
 
         const lod1 = this.device.createBuffer({
-            size: this.meshes.lod1.length * 16 * 4,
+            size: lodBufferSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: false
+            mappedAtCreation: false,
+            label: 'lod1'
         })
         
         const lod2 = this.device.createBuffer({
-            size: this.meshes.lod2.length * 16 * 4,
+            size: lod2BufferSize,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: false
+            mappedAtCreation: false,
+            label: 'lod2'
         })
 
         this.translationMatrices = { lod0: lod0, lod1: lod1, lod2: lod2}
@@ -335,17 +400,6 @@ export class Renderer {
 
         this.translationGroup = { lod0: bindgourpsLod0, lod1: bindgourpsLod1, lod2: bindgourpsLod2}
 
-/*
-        const debugLayout = this.device.createBindGroupLayout({
-            entries: [
-                {
-                    binding: 0,
-                    visibility: GPUShaderStage.FRAGMENT,
-                    storageTexture: {format: 'rgba32float'}
-                }
-            ]
-        })
-*/
         const pipelineLayout = this.device.createPipelineLayout({
             bindGroupLayouts: [bindGroupLayout, translationsLayout]
         });
@@ -394,35 +448,35 @@ export class Renderer {
     }
 
     setupAssets() {
-        const gridSize = 10;
-        for (let i = 0; i < gridSize * gridSize; i++) {
-            let x = Math.floor(i / gridSize);
-            let z = i % gridSize;
-            x = (x - gridSize / 2.0) * 2; 
-            z = (z - gridSize / 2.0) * 2;
+        for (let i = 0; i < this.gridSize * this.gridSize; i++) {
+            let x = Math.floor(i / this.gridSize);
+            let z = i % this.gridSize;
+            x = (x - this.gridSize / 2.0) * 2; 
+            z = (z - this.gridSize / 2.0) * 2;
             // Simple LOD
             var detail = 10;
-            console.log(i + ": " + vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) + "\n" + vec3.fromValues(x, 0, z))
-            if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < 5) {
+            if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < this.lod0Dist) {
                 detail = 256;
-                console.log(256);
                 this.meshes.lod0.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
             }
-            else if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < 10) {
+            else if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < this.lod1Dist) {
                 detail = 60;
-                console.log(60);
                 this.meshes.lod1.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
             }
             else {
                 detail = 10;
                 this.meshes.lod2.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
-            }    
+            }     
         }
         
     }
 
+    cnt: number = 0;
     async render() {
-        this.deltaTime = performance.now() / 1000000 - this.previousFrameTime;
+        this.deltaTime = performance.now() / 1000 - this.previousFrameTime;
+        this.previousFrameTime = performance.now() / 1000;
+
+        this.updateCamera();
         
         const commandEncoder: GPUCommandEncoder = this.device.createCommandEncoder();
         const textureView: GPUTextureView = this.context.getCurrentTexture().createView();
@@ -465,6 +519,10 @@ export class Renderer {
         renderpass.end();
         this.device.queue.submit([commandEncoder.finish()]);
 
+        if (this.lodsReadyForProcessing) {
+            this.recalculateLODs();
+        }
+
         if (this.paused) return;
 
         requestAnimationFrame(() => this.render());
@@ -472,19 +530,45 @@ export class Renderer {
     }
 
 
-    writeBuffers() {
-        const projection = mat4.create();
-        mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 100);
+    updateCamera() {
+        const speed = 0.2;
+        const time = performance.now() / 1000 * speed;
+        const bobSpeed = 4.0;
 
-        //vec3.add(this.cameraPos, this.cameraPos, vec3.scale(vec3.create(), this.cameraForward, this.deltaTime));
-        //vec3.rotateY(this.cameraForward, this.cameraForward, [0, 0, 0], this.deltaTime * 0.1);
+        const a = 10; 
+        const b = 10; 
+
+        const currentX = a * Math.cos(time);
+        const currentZ = b * Math.sin(2 * time) / 2;
+        const currentY = 1.5 + 0.2 * Math.sin(time * bobSpeed); 
+
+        // Calculate next position (slightly ahead in time)
+        const nextTime = time + 0.01; // Small time step for forward direction
+        const nextX = a * Math.cos(nextTime);
+        const nextZ = b * Math.sin(2 * nextTime) / 2;
+        const nextY =  1.5 + 0.2 * Math.sin(nextTime * bobSpeed);
+
+        // Update camera position
+        this.cameraPos[0] = currentX;
+        this.cameraPos[1] = currentY;
+        this.cameraPos[2] = currentZ;
+
+        // Calculate cameraForward vector (direction of motion)
+        const forward = vec3.fromValues(nextX - currentX, nextY - currentY, nextZ - currentZ);
+        vec3.normalize(this.cameraForward, forward);
+    }
+
+    writeBuffers() {
+        const time = performance.now() / 1000;
+        
+        const projection = mat4.create();
+        mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 30);
+   
         const view = mat4.create();
         const cameraPos = this.cameraPos;
         const forwardWorld = vec3.create();
         vec3.add(forwardWorld, this.cameraForward, cameraPos);
         mat4.lookAt(view, cameraPos, forwardWorld, [0, 1, 0]);
-
-        const time = performance.now() / 1000;
 
         const matrixData0 = new Float32Array(16 * this.meshes.lod0.length);
         const matrixData1 = new Float32Array(16 * this.meshes.lod1.length);
@@ -500,9 +584,6 @@ export class Renderer {
         });
 
 
-        console.log(matrixData0);
-        console.log(matrixData1);
-        console.log(matrixData2);
         this.device.queue.writeBuffer(this.translationMatrices.lod0, 0, matrixData0.buffer);
         this.device.queue.writeBuffer(this.translationMatrices.lod1, 0, matrixData1.buffer);
         this.device.queue.writeBuffer(this.translationMatrices.lod2, 0, matrixData2.buffer);
@@ -571,151 +652,4 @@ export class Renderer {
         );
         return texture;
     }
-/*
-    async render() {
-        const renderPipeline = this.device.createRenderPipeline({
-        layout: 'auto',
-        vertex: {
-            module: this.device.createShaderModule({
-            code: `
-        struct VertexIn {
-        @location(0) position: vec3<f32>,
-        @location(1) normal: vec3<f32>,
-        @location(2) uv: vec2<f32>,
-        };
-
-        struct VertexOut {
-        @builtin(position) position: vec4<f32>,
-        @location(0) normal: vec3<f32>,
-        @location(1) worldPos: vec3<f32>,
-        };
-
-        @group(0) @binding(0) var<uniform> viewProj: mat4x4<f32>;
-
-        @vertex
-        fn main(input: VertexIn) -> VertexOut {
-        var output: VertexOut;
-        output.position = viewProj * vec4f(input.position, 1.0);
-        output.normal = input.normal;
-        output.worldPos = input.position;
-        return output;
-        }
-            `
-            }),
-            entryPoint: 'main',
-            buffers: [
-            {
-                arrayStride: 8 * 4,
-                attributes: [
-                { shaderLocation: 0, offset: 0, format: 'float32x3' }, // position
-                { shaderLocation: 1, offset: 12, format: 'float32x3' }, // normal
-                { shaderLocation: 2, offset: 24, format: 'float32x2' }, // uv
-                ]
-            }
-            ]
-        },
-        fragment: {
-            module: this.device.createShaderModule({
-            code: `
-        @fragment
-        fn main(@location(0) normal: vec3<f32>, @location(1) worldPos: vec3<f32>) -> @location(0) vec4<f32> {
-        let lightDir = normalize(vec3<f32>(-0.4, 0.5, 0.3));
-        let lighting = max(dot(normal, lightDir), 0.0);
-        return vec4<f32>(0.0, 0.4, 0.8, 1.0);
-        }
-            `
-            }),
-            entryPoint: 'main',
-            targets: [{ format: 'bgra8unorm' }]
-        },
-        primitive: {
-            topology: 'triangle-strip',
-            stripIndexFormat: 'uint32',
-        },
-        depthStencil: {
-            format: 'depth24plus',
-            depthWriteEnabled: true,
-            depthCompare: 'less'
-        }
-        });
-        
-        const viewMatrix = mat4.create();
-        const projectionMatrix = mat4.create();
-        const viewProjMatrix = mat4.create();
-
-        // Set up perspective projection (field of view, aspect ratio, near, far)
-        mat4.perspective(projectionMatrix, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 500.0);
-
-        // Set up the view (camera) matrix
-        const cameraPosition = vec3.fromValues(30, 20, 30);
-        const target = vec3.fromValues(8, 0, 8);
-        const up = vec3.fromValues(0, 1, 0);
-        mat4.lookAt(viewMatrix, cameraPosition, target, up);
-
-        // Multiply projection * view
-        mat4.multiply(viewProjMatrix, projectionMatrix, viewMatrix);
-
-        // Create GPU buffer
-        const viewProjBuffer = this.device.createBuffer({
-        size: 64, // 4x4 matrix = 16 floats = 64 bytes
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-
-        // Upload data
-        this.device.queue.writeBuffer(viewProjBuffer, 0, viewProjMatrix as Float32Array);
-
-        const bindGroupLayout = renderPipeline.getBindGroupLayout(0);
-        const viewProjBindGroup = this.device.createBindGroup({
-        layout: bindGroupLayout,
-        entries: [
-            {
-            binding: 0,
-            resource: {
-                buffer: viewProjBuffer
-            }
-            }
-        ]
-        });
-
-        const tessellation = new AdaptiveWaterTessellation(this.device, this.cameraPos)
-
-        const patchData = tessellation.getPatchInfo();
-        const vertexBuffer = tessellation.getVertexBuffer();
-        const indexBuffers = tessellation.getIndexBuffers();
-
-        const commandEncoder = this.device.createCommandEncoder();
-        const pass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-            view: this.context.getCurrentTexture().createView(),
-            loadOp: 'clear',
-            storeOp: 'store',
-            clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
-        }],
-        depthStencilAttachment: {
-            view: this.depthTextureView,
-            depthLoadOp: 'clear',
-            depthStoreOp: 'store',
-            depthClearValue: 1.0,
-        }
-        });
-
-        pass.setPipeline(renderPipeline);
-        pass.setVertexBuffer(0, vertexBuffer);
-        pass.setBindGroup(0, viewProjBindGroup); // assuming you created a uniform bind group for view-projection
-
-        let vertexBaseOffset = 0;
-        for (let i = 0; i < patchData.length; i++) {
-        const lod = patchData[i].lod;
-        const res = [32, 16, 8][lod];
-        const numIndices = (res + 1) * 2 * res + (res - 1); // include primitive restarts
-        pass.setIndexBuffer(indexBuffers[lod], 'uint32');
-        pass.drawIndexed(numIndices, 1, 0, vertexBaseOffset / 32, 0);
-        vertexBaseOffset += (res + 1) * (res + 1) * 32; // 32 bytes per vertex
-        }
-
-        await vertexBuffer.mapAsync(GPUMapMode.READ);
-        console.log(vertexBuffer.getMappedRange());
-        pass.end();
-        this.device.queue.submit([commandEncoder.finish()]);
-    }*/
 }
