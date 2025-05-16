@@ -162,7 +162,7 @@ export class Renderer {
     lodsReadyForProcessing = true;
     async recalculateLODs() {
         this.lodsReadyForProcessing = false;
-        const chunkAmount = 2;
+        const chunkAmount = 3;
         let currentChunk = 0;
 
         const lod0: Plane[] = [];
@@ -531,7 +531,7 @@ export class Renderer {
 
 
     updateCamera() {
-        const speed = 0.2;
+        const speed = 0.1;
         const time = performance.now() / 1000 * speed;
         const bobSpeed = 4.0;
 
@@ -548,14 +548,16 @@ export class Renderer {
         const nextZ = b * Math.sin(2 * nextTime) / 2;
         const nextY =  1.5 + 0.2 * Math.sin(nextTime * bobSpeed);
 
+        
         // Update camera position
-        this.cameraPos[0] = currentX;
-        this.cameraPos[1] = currentY;
-        this.cameraPos[2] = currentZ;
+        //this.cameraPos[0] = currentX;
+        //this.cameraPos[1] = currentY;
+        //this.cameraPos[2] = currentZ;
 
         // Calculate cameraForward vector (direction of motion)
-        const forward = vec3.fromValues(nextX - currentX, nextY - currentY, nextZ - currentZ);
-        vec3.normalize(this.cameraForward, forward);
+        ///const forward = vec3.fromValues(nextX - currentX, nextY - currentY, nextZ - currentZ);
+        ///vec3.normalize(this.cameraForward, forward);
+    
     }
 
     writeBuffers() {

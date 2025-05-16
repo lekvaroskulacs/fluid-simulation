@@ -58,6 +58,8 @@ fn evaluateWave(pos: vec2<f32>) -> vec3<f32> {
     let basePhase: f32 = waveOptions._basePhase;
     let horizontalDisplacement: f32 = waveOptions._horizontalDisplacement;
     var amplitudeSum = 0.0;
+    var derivativeSumX = 0.0;
+    var derivativeSumY = 0.0;
 
     let maxWaves: u32 = u32(waveOptions._maxWaves);
 
@@ -80,7 +82,7 @@ fn evaluateWave(pos: vec2<f32>) -> vec3<f32> {
         let phase = seed; //+ f32(wave) * PI / 2.0; 
 
         let noiseId = vec2u(wave / 256, wave % 256);
-        //let direction = normalize(vec2f(textureLoad(noise, noiseId).xy));
+        //let direction = normalize(vec2f(textureLoad(noise, vec2u(u32(floor(sin(seed) * 255)), u32(floor(cos(seed) * 255)))).xy));
         let direction = normalize(vec2f(sin(seed), cos(seed)));
         seed += seedIter;
 
@@ -101,6 +103,7 @@ fn evaluateWave(pos: vec2<f32>) -> vec3<f32> {
         amplitude = amplitude * amplitudeMult;
         frequency = frequency * frequencyMult;
         amplitudeSum += amplitude;
+        derivativeSumX += amplitude * cosVal;
     }
     //dy_dx = smoothed_dy_dx;
     //dy_dz = smoothed_dy_dz;
@@ -143,14 +146,14 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
 @fragment
 fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>, @builtin(sample_index) id: u32) -> @location(0) vec4<f32> {
     const SPECULAR_SHININESS = 400.0;
-    const SPECULAR_STRENGTH = 2.0;
+    const SPECULAR_STRENGTH = 1.0;
     const FRESNEL_SHININESS = 5.0;
-    const FRESNEL_STRENGTH = 1.0;
-    const REFLECTION_STRENGTH = 0.5;
+    const FRESNEL_STRENGTH = 0.6;
+    const REFLECTION_STRENGTH = 1.0;
     const DIFFUSE_REFLECTANCE = 1;
     const SUN_DIRECTION = vec3f(-0.4, 0.2, 0.5);
     const SUN_INTENSITY = 1.0;
-    const AMBIENT_RGB = vec3f(17, 64, 77);
+    const AMBIENT_RGB = vec3f(17, 50, 100);
     const AMBIENT_STRENGTH = 0.2;
     const SPECULAR_RGB = vec3f(255, 255, 255);
 
@@ -161,6 +164,8 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     var camera = sceneOptions._cameraPosition.xyz;
     var viewDir = normalize(camera - WorldPosition.xyz);
     var normal = normalize(Normal.xyz);
+    normal.y += 5;
+    normal = normalize(normal);
 
     if (dot(normal, vec3f(0, 1, 0)) < 0.2) {
         normal = vec3f(0, 1, 0);
@@ -176,7 +181,7 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     var sun = normalize(SUN_DIRECTION);
     var diffuse = max(dot(sun, normal), 0.0) * DIFFUSE_REFLECTANCE * ambient;
 
-    let wrap = 0.8; // tweak for softness — 0.4 to 0.8 is typical
+    let wrap = 0.9; // tweak for softness — 0.4 to 0.8 is typical
     let dotNL = dot(normal, sun);
     let wrappedDiffuse = ((dotNL + wrap) / (1.0 + wrap)) * SUN_INTENSITY;
     let sssColor = ambient; // reflected color
@@ -189,13 +194,19 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     //reversed z coord, because skybox is rendered the same way 
     var reflected = textureSample(cubeMap, cubeSampler, reflectedDir * vec3f(1, 1, -1)) * REFLECTION_STRENGTH;
 
-    //var color = ambient * AMBIENT_STRENGTH + lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
-    //var color = sss + mix(diffuse, reflected, fresnel) + specular * fresnel;
-    //var color = sss;
-    var color =  sss + specular * fresnel + reflected * fresnel;
-    return vec4f(acesToneMapper(color.xyz), 1.0);
+    let distance = length(camera - WorldPosition.xyz);
+    let fogDensity = 0.02;
+    let fogColor = vec4f(0.5, 0.5, 0.5, 1.0);
+    let fogFactor = 1.0 - exp(-fogDensity * distance);
 
-    //return Normal;
+    //var color = ambient * AMBIENT_STRENGTH + lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
+    //var color = mix(sss, reflected, fresnel) + specular * fresnel;
+    //var color = mix(sss, fogColor, fog);
+    var color = specular + mix(sss, reflected, fresnel);
+    //color = mix(color, fogColor, fogFactor);
+    //return vec4f(acesToneMapper(color.xyz), 1.0);
+    return vec4f(color.xyz, 1.0);
+    //return reflected;
 }
 
 fn acesToneMapper(x: vec3<f32>) -> vec3<f32> {

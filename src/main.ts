@@ -16,6 +16,16 @@ window.addEventListener("resize", () => {
     renderer.render();
 });
 
+document.addEventListener('keydown', function(event) {
+    if (event.key != 'o')
+        return;
+    const container = document.getElementById('form') as HTMLDivElement;
+    if (container.style.display === 'none' || container.style.display === '') {
+        container.style.display = 'block'; // Show the container
+    } else {
+        container.style.display = 'none'; // Hide the container
+    }
+});
 
 (<HTMLInputElement> document.getElementById("amplitude")).value = localStorage.getItem("amplitude") ?? "1";
 (<HTMLInputElement> document.getElementById("amplitudeMultiplier")).value = localStorage.getItem("amplitudeMultiplier") ?? "1";
@@ -25,6 +35,6 @@ window.addEventListener("resize", () => {
 (<HTMLInputElement> document.getElementById("horizontalDisplacement")).value = localStorage.getItem("horizontalDisplacement") ?? "0";
 (<HTMLInputElement> document.getElementById("maxWaves")).value = localStorage.getItem("maxWaves") ?? "1";
 (<HTMLInputElement> document.getElementById("sunPosition")).value = localStorage.getItem("sunPosition") ?? "1";
-//renderParticles(new Circle(100, 100, 50));
+
 
 

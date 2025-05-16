@@ -142,7 +142,7 @@ export class Skybox {
 
     renderSkybox() {
         const projection = mat4.create();
-        mat4.perspective(projection, 60 * Math.PI / 180, this.canvas.width / this.canvas.height, 0.1, 10);
+        mat4.perspective(projection, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 10);
 
         const skyboxView = mat4.create();
         mat4.lookAt(skyboxView, [0, 0, 0], this.cameraForward, [0, 1, 0]);
