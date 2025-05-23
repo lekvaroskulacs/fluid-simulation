@@ -146,9 +146,9 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
 @fragment
 fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>, @builtin(sample_index) id: u32) -> @location(0) vec4<f32> {
     const SPECULAR_SHININESS = 400.0;
-    const SPECULAR_STRENGTH = 1.0;
-    const FRESNEL_SHININESS = 5.0;
-    const FRESNEL_STRENGTH = 0.6;
+    const SPECULAR_STRENGTH = 5.0;
+    const FRESNEL_SHININESS = 8.0;
+    const FRESNEL_STRENGTH = 0.4;
     const REFLECTION_STRENGTH = 1.0;
     const DIFFUSE_REFLECTANCE = 1;
     const SUN_DIRECTION = vec3f(-0.4, 0.2, 0.5);
@@ -164,6 +164,8 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     var camera = sceneOptions._cameraPosition.xyz;
     var viewDir = normalize(camera - WorldPosition.xyz);
     var normal = normalize(Normal.xyz);
+    var specularNormal = normal;
+    var reflectionNormal = normal;
     normal.y += 5;
     normal = normalize(normal);
 
@@ -188,8 +190,12 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     let sss = wrappedDiffuse * sssColor;
 
     var halfway = normalize(viewDir + sun);
-    var specular = pow(max(dot(halfway, normal), 0.0), SPECULAR_SHININESS) * SPECULAR_STRENGTH;
+    specularNormal.y += 1;
+    specularNormal = normalize(specularNormal);
+    var specular = pow(max(dot(halfway, specularNormal), 0.0), SPECULAR_SHININESS) * SPECULAR_STRENGTH;
 
+    reflectionNormal += 1;
+    reflectionNormal = normalize(reflectionNormal);
     var reflectedDir = reflect(-viewDir, normal);
     //reversed z coord, because skybox is rendered the same way 
     var reflected = textureSample(cubeMap, cubeSampler, reflectedDir * vec3f(1, 1, -1)) * REFLECTION_STRENGTH;
@@ -202,10 +208,10 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     //var color = ambient * AMBIENT_STRENGTH + lambert + specular * fresnel * specularColor * SPECULAR_STRENGTH + reflected * fresnel * REFLECTION_STRENGTH;
     //var color = mix(sss, reflected, fresnel) + specular * fresnel;
     //var color = mix(sss, fogColor, fog);
-    var color = specular + mix(sss, reflected, fresnel);
+    var color = mix(sss, reflected, fresnel) + mix(0.0, specular, fresnel);
     //color = mix(color, fogColor, fogFactor);
-    //return vec4f(acesToneMapper(color.xyz), 1.0);
-    return vec4f(color.xyz, 1.0);
+    return vec4f(acesToneMapper(color.xyz), 1.0);
+    //return vec4f(color.xyz, 1.0);
     //return reflected;
 }
 

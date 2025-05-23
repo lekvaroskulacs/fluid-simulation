@@ -550,13 +550,13 @@ export class Renderer {
 
         
         // Update camera position
-        //this.cameraPos[0] = currentX;
-        //this.cameraPos[1] = currentY;
-        //this.cameraPos[2] = currentZ;
+        this.cameraPos[0] = currentX;
+        this.cameraPos[1] = currentY;
+        this.cameraPos[2] = currentZ;
 
         // Calculate cameraForward vector (direction of motion)
-        ///const forward = vec3.fromValues(nextX - currentX, nextY - currentY, nextZ - currentZ);
-        ///vec3.normalize(this.cameraForward, forward);
+        const forward = vec3.fromValues(nextX - currentX, nextY - currentY, nextZ - currentZ);
+        vec3.normalize(this.cameraForward, forward);
     
     }
 
