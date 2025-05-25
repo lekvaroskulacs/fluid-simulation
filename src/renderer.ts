@@ -48,6 +48,7 @@ export class Renderer {
     lod0Dist = 10;
     lod1Dist = 20;
     gridSize = 30;
+    chunkOverlap = 0.1;
 
     skybox: Skybox;
     cameraForward: vec3 = vec3.fromValues(0, 0, 0);
@@ -182,13 +183,13 @@ export class Renderer {
                 let detail = 10;
                 if (distance < this.lod0Dist) {
                     detail = 256;
-                    lod0.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
+                    lod0.push(new Plane(1 + this.chunkOverlap, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
                 } else if (distance < this.lod1Dist) {
                     detail = 60;
-                    lod1.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
+                    lod1.push(new Plane(1 + this.chunkOverlap, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
                 } else {
                     detail = 10;
-                    lod2.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
+                    lod2.push(new Plane(1 + this.chunkOverlap, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(worldX, 0, worldZ)), this.device));
                 }
             }
 
@@ -457,15 +458,15 @@ export class Renderer {
             var detail = 10;
             if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < this.lod0Dist) {
                 detail = 256;
-                this.meshes.lod0.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
+                this.meshes.lod0.push(new Plane(1 + this.chunkOverlap, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
             }
             else if (vec3.distance(vec3.fromValues(x, 0, z), this.cameraPos) < this.lod1Dist) {
                 detail = 60;
-                this.meshes.lod1.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
+                this.meshes.lod1.push(new Plane(1 + this.chunkOverlap, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
             }
             else {
                 detail = 10;
-                this.meshes.lod2.push(new Plane(1, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
+                this.meshes.lod2.push(new Plane(1 + this.chunkOverlap, detail, mat4.translate(mat4.create(), mat4.create(), vec3.fromValues(x, 0, z)), this.device));
             }     
         }
         
@@ -550,13 +551,13 @@ export class Renderer {
 
         
         // Update camera position
-        this.cameraPos[0] = currentX;
-        this.cameraPos[1] = currentY;
-        this.cameraPos[2] = currentZ;
-
-        // Calculate cameraForward vector (direction of motion)
-        const forward = vec3.fromValues(nextX - currentX, nextY - currentY, nextZ - currentZ);
-        vec3.normalize(this.cameraForward, forward);
+        //this.cameraPos[0] = currentX;
+        //this.cameraPos[1] = currentY;
+        //this.cameraPos[2] = currentZ;
+//
+        //// Calculate cameraForward vector (direction of motion)
+        //const forward = vec3.fromValues(nextX - currentX, nextY - currentY, nextZ - currentZ);
+        //vec3.normalize(this.cameraForward, forward);
     
     }
 

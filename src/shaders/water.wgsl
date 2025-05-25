@@ -145,15 +145,15 @@ fn vs_main(@location(0) vertexPosition: vec3<f32>, @builtin(vertex_index) v_id: 
 
 @fragment
 fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>, @builtin(sample_index) id: u32) -> @location(0) vec4<f32> {
-    const SPECULAR_SHININESS = 400.0;
-    const SPECULAR_STRENGTH = 5.0;
+    const SPECULAR_SHININESS = 200.0;
+    const SPECULAR_STRENGTH = 12;
     const FRESNEL_SHININESS = 8.0;
     const FRESNEL_STRENGTH = 0.4;
     const REFLECTION_STRENGTH = 1.0;
     const DIFFUSE_REFLECTANCE = 1;
     const SUN_DIRECTION = vec3f(-0.4, 0.2, 0.5);
     const SUN_INTENSITY = 1.0;
-    const AMBIENT_RGB = vec3f(17, 50, 100);
+    const AMBIENT_RGB = vec3f(0, 30, 60);
     const AMBIENT_STRENGTH = 0.2;
     const SPECULAR_RGB = vec3f(255, 255, 255);
 
@@ -190,7 +190,7 @@ fn fs_main(@location(0) Normal: vec4<f32>, @location(1) WorldPosition: vec4<f32>
     let sss = wrappedDiffuse * sssColor;
 
     var halfway = normalize(viewDir + sun);
-    specularNormal.y += 1;
+    specularNormal.y += 3;
     specularNormal = normalize(specularNormal);
     var specular = pow(max(dot(halfway, specularNormal), 0.0), SPECULAR_SHININESS) * SPECULAR_STRENGTH;
 
